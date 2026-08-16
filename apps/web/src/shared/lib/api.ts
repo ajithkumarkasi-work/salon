@@ -2,7 +2,8 @@ import axios from 'axios';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { demoApiAdapter } from '@/shared/lib/demo-api';
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1';
+const configuredApiUrl = String(import.meta.env.VITE_API_URL ?? '').trim();
+const BASE_URL = configuredApiUrl.length > 0 ? configuredApiUrl : '/api/v1';
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 export const api = axios.create({

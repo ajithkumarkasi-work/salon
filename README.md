@@ -410,12 +410,15 @@ This repository includes two workflows:
 - `.github/workflows/backend-ci-deploy.yml`
 - `.github/workflows/web-ci-deploy.yml`
 
-They run build checks on push and can trigger host deploy webhooks.
+They run build checks on push.
+
+- Backend workflow: optional deploy via webhook.
+- Web workflow: deploys directly to GitHub Pages.
 
 Configure repository secrets in GitHub:
 
 - `API_DEPLOY_HOOK_URL`: backend deploy webhook (Render/Railway/Fly or your host)
-- `WEB_DEPLOY_HOOK_URL`: frontend deploy webhook (Vercel/Netlify/Cloudflare Pages or your host)
+- `VITE_API_URL`: deployed backend URL with `/api/v1` suffix (example: `https://api.example.com/api/v1`)
 
 Branch trigger:
 
@@ -423,6 +426,10 @@ Branch trigger:
 - `ajithkumarkasi-work`
 
 If the hook secrets are not set, workflows still run CI build checks but skip deploy steps.
+
+For GitHub Pages, enable Pages in repository settings:
+
+- Settings -> Pages -> Build and deployment -> Source: `GitHub Actions`
 
 ---
 
