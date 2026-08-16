@@ -403,6 +403,27 @@ Yes, they work when both are deployed with the correct env wiring:
 
 If any of these are missing, login/data calls can fail due to CORS or wrong API URL.
 
+### 5) GitHub Actions auto-deploy setup
+
+This repository includes two workflows:
+
+- `.github/workflows/backend-ci-deploy.yml`
+- `.github/workflows/web-ci-deploy.yml`
+
+They run build checks on push and can trigger host deploy webhooks.
+
+Configure repository secrets in GitHub:
+
+- `API_DEPLOY_HOOK_URL`: backend deploy webhook (Render/Railway/Fly or your host)
+- `WEB_DEPLOY_HOOK_URL`: frontend deploy webhook (Vercel/Netlify/Cloudflare Pages or your host)
+
+Branch trigger:
+
+- `main`
+- `ajithkumarkasi-work`
+
+If the hook secrets are not set, workflows still run CI build checks but skip deploy steps.
+
 ---
 
 ## Security
