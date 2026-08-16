@@ -1,0 +1,14 @@
+node_modules
+.npm-cache
+dist
+build
+.next
+.expo
+*.local
+.env
+.env.*
+!.env.example
+coverage
+.turbo
+prisma/migrations
+*.log

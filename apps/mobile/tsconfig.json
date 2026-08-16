@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "extends": "expo/tsconfig.base",
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@glowbook/shared-types": ["../../packages/shared-types/src"],
+      "@glowbook/validation": ["../../packages/validation/src"]
+    }
+  }
+}

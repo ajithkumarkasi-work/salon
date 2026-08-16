@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "GlowBook",
+    "slug": "glowbook",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "io.glowbook.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "GlowBook uses your location to find nearby salons."
+      }
+    },
+    "android": {
+      "package": "io.glowbook.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-notifications"
+    ],
+    "scheme": "glowbook",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "d6d5d868-3b1c-417b-8f60-b80a35034c94"
+      }
+    }
+  }
+}
