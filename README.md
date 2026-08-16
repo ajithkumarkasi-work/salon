@@ -319,26 +319,89 @@ All demo accounts use password: **`GlowBook2024`**
 
 ## Deployment
 
-### API
+### Recommended setup (GitHub)
+
+- Deploy backend (`apps/api`) to a Node host (Render, Railway, Fly.io, EC2, etc.)
+- Deploy frontend (`apps/web`) to a static/web host (Vercel, Netlify, Cloudflare Pages)
+- Build mobile (`apps/mobile`) with EAS (Expo cloud)
+
+### 1) Backend deploy checklist (`apps/api`)
+
+- Root directory: `apps/api`
+- Install command: `npm install`
+- Build command: `npm run build`
+- Start command: `npm run start`
+
+Required environment variables:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `JWT_REFRESH_SECRET`
+- `JWT_EXPIRES_IN` (example: `15m`)
+- `JWT_REFRESH_EXPIRES_IN` (example: `7d`)
+- `PORT` (hosting platform may inject this automatically)
+- `NODE_ENV=production`
+- `ALLOWED_ORIGINS` (comma-separated deployed frontend origins)
+
+Optional/feature-specific variables:
+
+- `STRIPE_SECRET_KEY`
+- `SENDGRID_API_KEY`
+- `EMAIL_FROM`
+- `STORAGE_URL`
+- `STORAGE_KEY`
+- `STORAGE_SECRET`
+- `MAPS_API_KEY`
+
+After first deploy, run schema + seed against production database:
+
 ```bash
 cd apps/api
-npm run build
-node dist/main
+npx prisma db push
+npx prisma db seed
 ```
 
-### Web Dashboard
-```bash
-cd apps/web
-npm run build
-# Deploy dist/ to Vercel, Netlify, or S3+CloudFront
-```
+### 2) Frontend deploy checklist (`apps/web`)
 
-### Mobile
+- Root directory: `apps/web`
+- Install command: `npm install`
+- Build command: `npm run build`
+- Output directory: `dist`
+
+Required environment variables:
+
+- `VITE_API_URL=https://<your-api-domain>/api/v1`
+- `VITE_DEMO_MODE=false`
+
+Important:
+
+- Do not keep `VITE_API_URL` on localhost after deploy.
+- Add your frontend URL to backend `ALLOWED_ORIGINS`.
+
+### 3) Mobile build checklist (`apps/mobile`)
+
+Use EAS cloud build (recommended):
+
 ```bash
 cd apps/mobile
-npx expo build
-# Submit to App Store / Google Play via EAS
+npm_config_cache="$TMPDIR/npm-cache" npx --yes eas-cli login
+npm_config_cache="$TMPDIR/npm-cache" npx --yes eas-cli build -p android --profile preview --clear-cache
 ```
+
+Notes:
+
+- This repo is already linked to EAS project `@akajith555/glowbook`.
+- If build fails, check the `Run gradlew` phase in Expo build logs.
+
+### 4) Will frontend and backend work when deployed from GitHub?
+
+Yes, they work when both are deployed with the correct env wiring:
+
+- Backend is live and database is reachable.
+- Frontend `VITE_API_URL` points to deployed backend.
+- Backend `ALLOWED_ORIGINS` includes deployed frontend domain.
+
+If any of these are missing, login/data calls can fail due to CORS or wrong API URL.
 
 ---
 
