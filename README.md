@@ -306,8 +306,10 @@ To make Prisma schema sync run automatically on every Render deploy, configure A
 This uses `build:render` in [apps/api/package.json](apps/api/package.json), which runs:
 
 1. Prisma client generation
-2. NestJS build
-3. Prisma schema push (`prisma db push`)
+2. Prisma schema push (`prisma db push`)
+3. NestJS build
+
+This repository does not currently include a Prisma `migrations/` directory under [apps/api/prisma](apps/api/prisma), so `prisma db push` is the correct bootstrap mechanism for the initial production database setup. Once migrations are added and committed, switch this deployment step to `prisma migrate deploy`.
 
 Required Render environment variables:
 
