@@ -14,6 +14,14 @@ A production-quality, full-stack **Salon & Spa Appointment Booking Platform** bu
 
 ---
 
+## Live URLs
+
+- Web App (Vercel): `https://salon-web-nine-theta.vercel.app`
+- API Base (Production): `https://salon-api-ubfz.onrender.com/api/v1`
+- Swagger (Production): `https://salon-api-ubfz.onrender.com/api/docs`
+
+---
+
 ## Features
 
 ### Customer
@@ -288,6 +296,28 @@ cd apps/mobile && npm start
 
 ---
 
+## Render Deployment (API)
+
+To make Prisma schema sync run automatically on every Render deploy, configure API service commands as:
+
+- Build Command: `npm ci && npm run build:render --workspace=@glowbook/api`
+- Start Command: `npm run start --workspace=@glowbook/api`
+
+This uses `build:render` in [apps/api/package.json](apps/api/package.json), which runs:
+
+1. Prisma client generation
+2. NestJS build
+3. Prisma schema push (`prisma db push`)
+
+Required Render environment variables:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `JWT_REFRESH_SECRET`
+- `ALLOWED_ORIGINS`
+
+---
+
 ## Testing
 
 ```bash
@@ -384,7 +414,7 @@ npx prisma db seed
 
 Required environment variables:
 
-- `VITE_API_URL=https://<your-api-domain>/api/v1`
+- `VITE_API_URL=https://salon-api-ubfz.onrender.com/api/v1`
 - `VITE_DEMO_MODE=false`
 
 Important:

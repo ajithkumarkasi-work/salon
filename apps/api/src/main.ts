@@ -5,6 +5,26 @@ import { AppModule } from './app.module';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 
+function normalizeOrigin(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function isOriginAllowed(origin: string, allowedOrigins: string[]): boolean {
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  return allowedOrigins.some((allowedOrigin) => {
+    const normalizedAllowed = normalizeOrigin(allowedOrigin);
+
+    if (normalizedAllowed.startsWith('*.')) {
+      // Supports entries like *.vercel.app for preview deployments.
+      const suffix = normalizedAllowed.slice(1); // .vercel.app
+      return normalizedOrigin.endsWith(suffix);
+    }
+
+    return normalizedAllowed === normalizedOrigin;
+  });
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: false });
   const configuredOrigins = (process.env.ALLOWED_ORIGINS ?? '')
@@ -24,7 +44,8 @@ async function bootstrap() {
       // Allow requests without Origin header (server-to-server, curl, mobile apps).
       if (!origin) return callback(null, true);
 
-      const allowed = (configuredOrigins.length ? configuredOrigins : defaultOrigins).includes(origin);
+      const allowedList = configuredOrigins.length ? configuredOrigins : defaultOrigins;
+      const allowed = isOriginAllowed(origin, allowedList);
       const isLocalDevOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 
       if (allowed || (isDev && isLocalDevOrigin)) {
