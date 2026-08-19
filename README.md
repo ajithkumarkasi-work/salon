@@ -240,6 +240,7 @@ Edit `apps/api/.env` with your PostgreSQL credentials and JWT secrets.
 ### 3. Set up database
 
 ```bash
+npm run db:up      # Start PostgreSQL via Docker Compose (optional if Postgres is already running locally)
 npm run db:push    # Push schema to database
 npm run db:seed    # Seed with realistic demo data
 ```
@@ -247,13 +248,26 @@ npm run db:seed    # Seed with realistic demo data
 ### 4. Run development servers
 
 ```bash
-# Run all apps simultaneously
+# Start API and web together from the repo root
 npm run dev
 
-# Or individually:
-cd apps/api && npm run dev       # API on :3001
-cd apps/web && npm run dev       # Dashboard on :5173
-cd apps/mobile && npm start      # Expo mobile app
+# Start the Expo mobile app in a separate terminal
+cd apps/mobile && npm start
+```
+
+`npm run dev` uses Turbo and starts the workspaces that define a `dev` script. In this monorepo that means:
+
+- API on `http://localhost:3001/api/v1`
+- Swagger on `http://localhost:3001/api/docs`
+- Web dashboard on `http://localhost:5173`
+
+The mobile app is not included in the root `npm run dev` command, so start it separately:
+
+```bash
+# Individual commands if you want to run each app directly
+cd apps/api && npm run dev
+cd apps/web && npm run dev
+cd apps/mobile && npm start
 ```
 
 ---
