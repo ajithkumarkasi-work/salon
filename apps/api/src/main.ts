@@ -62,7 +62,7 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, document);
   }
 
-  const port = process.env.PORT ?? 3001;
+  const port = Number(process.env.PORT) || 3000;
   await app.listen(port);
   console.log(`GlowBook API running on http://localhost:${port}/api/v1`);
   console.log(`Swagger docs: http://localhost:${port}/api/docs`);
