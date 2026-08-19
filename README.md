@@ -284,7 +284,8 @@ cd apps/mobile && npm start
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DATABASE_URL` | Runtime PostgreSQL connection string. For Supabase on Render, use the pooled transaction URL on port `6543`. |
+| `DIRECT_URL` | Direct/session PostgreSQL connection string for Prisma schema operations. For Supabase, use the session-mode URL on port `5432`. |
 | `JWT_SECRET` | Access token signing secret |
 | `JWT_REFRESH_SECRET` | Refresh token signing secret |
 | `JWT_EXPIRES_IN` | Access token expiry (default: 15m) |
@@ -314,9 +315,15 @@ This repository does not currently include a Prisma `migrations/` directory unde
 Required Render environment variables:
 
 - `DATABASE_URL`
+- `DIRECT_URL`
 - `JWT_SECRET`
 - `JWT_REFRESH_SECRET`
 - `ALLOWED_ORIGINS`
+
+Supabase note:
+
+- `DATABASE_URL` should stay on the pooled host/port `6543` for normal app runtime.
+- `DIRECT_URL` should use the session/direct connection on port `5432` so Prisma schema sync does not run through the transaction pooler.
 
 ---
 
