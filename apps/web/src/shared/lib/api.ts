@@ -3,7 +3,15 @@ import { useAuthStore } from '@/shared/stores/auth.store';
 import { demoApiAdapter } from '@/shared/lib/demo-api';
 
 const configuredApiUrl = String(import.meta.env.VITE_API_URL ?? '').trim();
-const BASE_URL = configuredApiUrl.length > 0 ? configuredApiUrl : '/api/v1';
+const normalizeApiBaseUrl = (url: string): string => {
+  if (!url) return '/api/v1';
+
+  const withoutTrailingSlash = url.replace(/\/+$/, '');
+  // Guard against accidental env values like .../api/v1/api/v1.
+  return withoutTrailingSlash.replace(/\/api\/v1\/api\/v1$/i, '/api/v1');
+};
+
+const BASE_URL = normalizeApiBaseUrl(configuredApiUrl);
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
 
 export const api = axios.create({
