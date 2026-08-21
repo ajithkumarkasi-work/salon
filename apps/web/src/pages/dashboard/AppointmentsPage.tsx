@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { Search } from 'lucide-react';
 import { Card, CardContent } from '@/shared/components/ui/card';
@@ -7,7 +7,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
 import { CustomSelect } from '@/shared/components/ui/custom-select';
-import { useAppointment, useAppointments, useCreateAppointment, useUpdateAppointmentStatuses } from '@/features/appointments/hooks';
+import { useAppointment, useAppointments, useCreateAppointment, useUpdateAppointmentStatus } from '@/features/appointments/hooks';
 import { useServices } from '@/features/services/hooks';
 import { useStaff } from '@/features/staff/hooks';
 import { useSalonStore } from '@/shared/stores/salon.store';
@@ -62,9 +62,7 @@ export default function AppointmentsPage() {
   const [couponCode, setCouponCode] = useState('');
   const [notes, setNotes] = useState('');
   const [manualReason, setManualReason] = useState('');
-  const [pendingStatusUpdates, setPendingStatusUpdates] = useState<Record<string, AppointmentStatus>>({});
-  const pendingStatusUpdatesRef = useRef<Record<string, AppointmentStatus>>({});
-  const saveStatusUpdatesRef = useRef<() => void>(() => undefined);
+  const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, AppointmentStatus>>({});
   const { activeSalonId } = useSalonStore();
   const { user } = useAuthStore();
   const { toast } = useToast();
@@ -104,8 +102,7 @@ export default function AppointmentsPage() {
     limit: 1,
   });
 
-  const updateStatus = useUpdateAppointmentStatuses();
-  const updateStatusMutationRef = useRef(updateStatus.mutateAsync);
+  const updateStatus = useUpdateAppointmentStatus();
   const createAppointment = useCreateAppointment();
   const { data: appointmentDetail, isLoading: appointmentDetailLoading } = useAppointment(selectedAppointmentId ?? '');
   const canAssistBooking = user?.role === UserRole.ADMIN;
@@ -125,54 +122,29 @@ export default function AppointmentsPage() {
   }, [staff, serviceId]);
 
   const appointmentStatus = (appt: any): AppointmentStatus =>
-    pendingStatusUpdates[appt.id] ?? appt.status;
+    optimisticStatuses[appt.id] ?? appt.status;
 
   const handleChangeStatus = (appt: any, nextStatus: AppointmentStatus) => {
-    const updates = { ...pendingStatusUpdatesRef.current, [appt.id]: nextStatus };
-    pendingStatusUpdatesRef.current = updates;
-    setPendingStatusUpdates(updates);
+    setOptimisticStatuses((current) => ({ ...current, [appt.id]: nextStatus }));
+
+    updateStatus.mutate(
+      { id: appt.id, status: nextStatus },
+      {
+        onError: () => {
+          setOptimisticStatuses((current) => {
+            if (current[appt.id] !== nextStatus) return current;
+            const { [appt.id]: _, ...remainingStatuses } = current;
+            return remainingStatuses;
+          });
+          toast({
+            variant: 'destructive',
+            title: 'Status update failed',
+            description: 'The appointment status was restored. Please try again.',
+          });
+        },
+      },
+    );
   };
-
-  useEffect(() => {
-    updateStatusMutationRef.current = updateStatus.mutateAsync;
-  });
-
-  const saveStatusUpdates = () => {
-    const updates = pendingStatusUpdatesRef.current;
-    const entries = Object.entries(updates);
-    if (!entries.length || updateStatus.isPending) return;
-
-    pendingStatusUpdatesRef.current = {};
-    setPendingStatusUpdates({});
-
-    void updateStatusMutationRef.current({
-      updates: entries.map(([id, status]) => ({ id, status })),
-    }).then(() => {
-      toast({
-        title: 'Appointment updates saved',
-        description: `${entries.length} status ${entries.length === 1 ? 'change' : 'changes'} saved.`,
-        variant: 'success' as any,
-      });
-    }).catch(() => {
-      toast({
-        variant: 'destructive',
-        title: 'Status updates failed',
-        description: 'Your unsaved changes were not applied. Please try again.',
-      });
-    });
-  };
-
-  saveStatusUpdatesRef.current = saveStatusUpdates;
-
-  useEffect(() => {
-    const flushStatusUpdates = () => saveStatusUpdatesRef.current();
-
-    window.addEventListener('pagehide', flushStatusUpdates);
-    return () => {
-      window.removeEventListener('pagehide', flushStatusUpdates);
-      flushStatusUpdates();
-    };
-  }, []);
 
   useEffect(() => {
     if (!isBookingModalOpen) return;
@@ -256,12 +228,6 @@ export default function AppointmentsPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Appointments</h1>
         <div className="flex items-center gap-2">
-          {Object.keys(pendingStatusUpdates).length > 0 && (
-            <>
-              <Badge variant="secondary" className="w-fit">{Object.keys(pendingStatusUpdates).length} unsaved</Badge>
-              <Button type="button" size="sm" onClick={saveStatusUpdates} loading={updateStatus.isPending}>Save changes</Button>
-            </>
-          )}
           <Badge variant="secondary" className="w-fit">Live booking board</Badge>
           {canAssistBooking && (
             <Button type="button" size="sm" onClick={() => setIsBookingModalOpen(true)}>

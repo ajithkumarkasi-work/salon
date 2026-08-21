@@ -49,13 +49,11 @@ export function useCalendar(salonId: string, startDate: string, endDate: string)
 }
 
 export function useUpdateAppointmentStatus() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, status, note }: { id: string; status: string; note?: string }) => {
       const { data } = await api.patch(`/appointments/${id}/status`, { status, note });
       return data;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.all }),
   });
 }
 
