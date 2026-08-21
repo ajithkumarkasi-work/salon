@@ -7,6 +7,7 @@ import { api } from '@/shared/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
+import { ContentLoader } from '@/shared/components/PageLoader';
 
 const STATUS_GROUPS = [
   { key: 'upcoming', label: 'Upcoming', statuses: ['PENDING', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS'] },
@@ -67,7 +68,7 @@ export default function CustomerAppointmentsPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading bookings...</p>
+        <ContentLoader label="Loading bookings..." />
       ) : (
         <Card>
           <CardHeader className="pb-3">

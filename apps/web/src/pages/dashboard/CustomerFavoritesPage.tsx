@@ -5,6 +5,7 @@ import { api } from '@/shared/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
+import { ContentLoader } from '@/shared/components/PageLoader';
 
 export default function CustomerFavoritesPage() {
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ export default function CustomerFavoritesPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading favorites...</p>
+        <ContentLoader label="Loading favorites..." />
       ) : (
         <>
           {!!favorites.length && (

@@ -33,6 +33,7 @@ const CustomerBookingPage = lazy(() => import('@/pages/dashboard/CustomerBooking
 const CustomerAppointmentDetailsPage = lazy(() => import('@/pages/dashboard/CustomerAppointmentDetailsPage'));
 const CustomerPaymentHistoryPage = lazy(() => import('@/pages/dashboard/CustomerPaymentHistoryPage'));
 const CustomerReviewsPage = lazy(() => import('@/pages/dashboard/CustomerReviewsPage'));
+const AdminUsersPage = lazy(() => import('@/pages/dashboard/AdminUsersPage'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, user } = useAuthStore();
@@ -176,6 +177,14 @@ export default function App() {
               element={
                 <RoleRoute roles={[UserRole.SALON_OWNER, UserRole.ADMIN]}>
                   <AnalyticsPage />
+                </RoleRoute>
+              }
+            />
+            <Route
+              path="/dashboard/admin/users"
+              element={
+                <RoleRoute roles={[UserRole.ADMIN]}>
+                  <AdminUsersPage />
                 </RoleRoute>
               }
             />

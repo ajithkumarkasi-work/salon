@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { Search } from 'lucide-react';
 import { Card, CardContent } from '@/shared/components/ui/card';
@@ -7,7 +7,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
 import { CustomSelect } from '@/shared/components/ui/custom-select';
-import { useAppointment, useAppointments, useCreateAppointment, useUpdateAppointmentStatus } from '@/features/appointments/hooks';
+import { useAppointment, useAppointments, useCreateAppointment, useUpdateAppointmentStatuses } from '@/features/appointments/hooks';
 import { useServices } from '@/features/services/hooks';
 import { useStaff } from '@/features/staff/hooks';
 import { useSalonStore } from '@/shared/stores/salon.store';
@@ -62,6 +62,9 @@ export default function AppointmentsPage() {
   const [couponCode, setCouponCode] = useState('');
   const [notes, setNotes] = useState('');
   const [manualReason, setManualReason] = useState('');
+  const [pendingStatusUpdates, setPendingStatusUpdates] = useState<Record<string, AppointmentStatus>>({});
+  const pendingStatusUpdatesRef = useRef<Record<string, AppointmentStatus>>({});
+  const saveStatusUpdatesRef = useRef<() => void>(() => undefined);
   const { activeSalonId } = useSalonStore();
   const { user } = useAuthStore();
   const { toast } = useToast();
@@ -101,7 +104,8 @@ export default function AppointmentsPage() {
     limit: 1,
   });
 
-  const updateStatus = useUpdateAppointmentStatus();
+  const updateStatus = useUpdateAppointmentStatuses();
+  const updateStatusMutationRef = useRef(updateStatus.mutateAsync);
   const createAppointment = useCreateAppointment();
   const { data: appointmentDetail, isLoading: appointmentDetailLoading } = useAppointment(selectedAppointmentId ?? '');
   const canAssistBooking = user?.role === UserRole.ADMIN;
@@ -120,14 +124,55 @@ export default function AppointmentsPage() {
     return (staff ?? []).filter((member: any) => (member.services ?? []).some((s: any) => s.serviceId === serviceId));
   }, [staff, serviceId]);
 
-  const handleChangeStatus = async (appt: any, nextStatus: AppointmentStatus) => {
-    try {
-      await updateStatus.mutateAsync({ id: appt.id, status: nextStatus });
-      toast({ title: 'Status updated', description: `Appointment moved to ${formatStatusLabel(nextStatus)}.`, variant: 'success' as any });
-    } catch {
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to update appointment status.' });
-    }
+  const appointmentStatus = (appt: any): AppointmentStatus =>
+    pendingStatusUpdates[appt.id] ?? appt.status;
+
+  const handleChangeStatus = (appt: any, nextStatus: AppointmentStatus) => {
+    const updates = { ...pendingStatusUpdatesRef.current, [appt.id]: nextStatus };
+    pendingStatusUpdatesRef.current = updates;
+    setPendingStatusUpdates(updates);
   };
+
+  useEffect(() => {
+    updateStatusMutationRef.current = updateStatus.mutateAsync;
+  });
+
+  const saveStatusUpdates = () => {
+    const updates = pendingStatusUpdatesRef.current;
+    const entries = Object.entries(updates);
+    if (!entries.length || updateStatus.isPending) return;
+
+    pendingStatusUpdatesRef.current = {};
+    setPendingStatusUpdates({});
+
+    void updateStatusMutationRef.current({
+      updates: entries.map(([id, status]) => ({ id, status })),
+    }).then(() => {
+      toast({
+        title: 'Appointment updates saved',
+        description: `${entries.length} status ${entries.length === 1 ? 'change' : 'changes'} saved.`,
+        variant: 'success' as any,
+      });
+    }).catch(() => {
+      toast({
+        variant: 'destructive',
+        title: 'Status updates failed',
+        description: 'Your unsaved changes were not applied. Please try again.',
+      });
+    });
+  };
+
+  saveStatusUpdatesRef.current = saveStatusUpdates;
+
+  useEffect(() => {
+    const flushStatusUpdates = () => saveStatusUpdatesRef.current();
+
+    window.addEventListener('pagehide', flushStatusUpdates);
+    return () => {
+      window.removeEventListener('pagehide', flushStatusUpdates);
+      flushStatusUpdates();
+    };
+  }, []);
 
   useEffect(() => {
     if (!isBookingModalOpen) return;
@@ -211,6 +256,12 @@ export default function AppointmentsPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Appointments</h1>
         <div className="flex items-center gap-2">
+          {Object.keys(pendingStatusUpdates).length > 0 && (
+            <>
+              <Badge variant="secondary" className="w-fit">{Object.keys(pendingStatusUpdates).length} unsaved</Badge>
+              <Button type="button" size="sm" onClick={saveStatusUpdates} loading={updateStatus.isPending}>Save changes</Button>
+            </>
+          )}
           <Badge variant="secondary" className="w-fit">Live booking board</Badge>
           {canAssistBooking && (
             <Button type="button" size="sm" onClick={() => setIsBookingModalOpen(true)}>
@@ -279,9 +330,10 @@ export default function AppointmentsPage() {
               </Card>
             )
             : data?.data?.map((appt: any) => {
-              const transitions = STATUS_TRANSITIONS[appt.status as AppointmentStatus] ?? [];
+              const status = appointmentStatus(appt);
+              const transitions = STATUS_TRANSITIONS[status] ?? [];
               const allowedStatuses = canOverrideTransitions
-                ? ALL_APPOINTMENT_STATUSES.filter((status) => status !== appt.status)
+                ? ALL_APPOINTMENT_STATUSES.filter((option) => option !== status)
                 : transitions;
 
               return (
@@ -299,8 +351,8 @@ export default function AppointmentsPage() {
                         {format(new Date(appt.startTime), 'dd MMM, HH:mm')}
                       </p>
                     </div>
-                    <Badge className={getStatusColor(appt.status)} variant="outline">
-                      {appt.status.replace('_', ' ')}
+                    <Badge className={getStatusColor(status)} variant="outline">
+                      {status.replace('_', ' ')}
                     </Badge>
                   </div>
 
@@ -327,7 +379,6 @@ export default function AppointmentsPage() {
                         className="w-[110px]"
                         buttonClassName="h-8 px-2.5 text-xs"
                         menuClassName="z-20"
-                        disabled={updateStatus.isPending}
                         onChange={(nextValue) => handleChangeStatus(appt, nextValue as AppointmentStatus)}
                       />
                     </div>
@@ -367,9 +418,10 @@ export default function AppointmentsPage() {
                       </tr>
                     )
                       : data?.data?.map((appt: any) => {
-                        const transitions = STATUS_TRANSITIONS[appt.status as AppointmentStatus] ?? [];
+                        const status = appointmentStatus(appt);
+                        const transitions = STATUS_TRANSITIONS[status] ?? [];
                         const allowedStatuses = canOverrideTransitions
-                          ? ALL_APPOINTMENT_STATUSES.filter((status) => status !== appt.status)
+                          ? ALL_APPOINTMENT_STATUSES.filter((option) => option !== status)
                           : transitions;
 
                       return (
@@ -403,8 +455,8 @@ export default function AppointmentsPage() {
                           <p className="text-xs text-muted-foreground">{format(new Date(appt.startTime), 'HH:mm')}</p>
                         </td>
                         <td className="px-4 py-3">
-                          <Badge className={getStatusColor(appt.status)} variant="outline">
-                            {appt.status.replace('_', ' ')}
+                          <Badge className={getStatusColor(status)} variant="outline">
+                            {status.replace('_', ' ')}
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
@@ -437,7 +489,6 @@ export default function AppointmentsPage() {
                                 className="w-[116px]"
                                 menuClassName="right-0 left-auto w-[190px]"
                                 buttonClassName="justify-between gap-2"
-                                disabled={updateStatus.isPending}
                                 onChange={(nextValue) => handleChangeStatus(appt, nextValue as AppointmentStatus)}
                               />
                             </div>

@@ -5,9 +5,10 @@
   "scripts": {
     "prisma:generate": "prisma generate --schema=prisma/schema.prisma",
     "prisma:push": "set -a && [ -f .env ] && . ./.env && set +a; DIRECT_URL=${DIRECT_URL:-$DATABASE_URL} prisma db push --schema=prisma/schema.prisma",
+    "prisma:seed": "prisma db seed",
     "prebuild": "prisma generate --schema=prisma/schema.prisma",
     "build": "nest build",
-    "build:render": "npm run prisma:generate && npm run prisma:push && nest build",
+    "build:render": "npm run prisma:generate && npm run prisma:push && npm run prisma:seed && nest build",
     "dev": "nest start --watch",
     "start": "node dist/apps/api/src/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

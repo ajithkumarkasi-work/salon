@@ -5,6 +5,7 @@ import { api } from '@/shared/lib/api';
 import { Card, CardContent } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
+import { ContentLoader } from '@/shared/components/PageLoader';
 
 type NotificationFilter = 'all' | 'unread';
 
@@ -71,7 +72,7 @@ export default function CustomerNotificationsPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading notifications...</p>
+        <ContentLoader label="Loading notifications..." />
       ) : (
         <div className="space-y-3">
           {visibleNotifications.map((n: any) => (

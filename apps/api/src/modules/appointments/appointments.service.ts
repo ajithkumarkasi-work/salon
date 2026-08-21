@@ -16,6 +16,7 @@ import {
   RescheduleAppointmentDto,
   CancelAppointmentDto,
   UpdateAppointmentStatusDto,
+  UpdateAppointmentStatusesDto,
 } from '@glowbook/validation';
 import { AppointmentStatus, NotificationType, UserRole } from '@glowbook/shared-types';
 import * as QRCode from 'qrcode';
@@ -267,7 +268,14 @@ export class AppointmentsService {
       where.staffId = staff.id;
     } else if (role === 'SALON_OWNER') {
       if (salonId) {
-        where.salonId = salonId;
+        const salon = await this.prisma.salon.findFirst({
+          where: { id: salonId, ownerId: userId },
+          select: { id: true },
+        });
+        if (!salon) {
+          throw new ForbiddenException('Not authorized to view appointments for this salon');
+        }
+        where.salonId = salon.id;
       } else {
         const salons = await this.prisma.salon.findMany({ where: { ownerId: userId }, select: { id: true } });
         where.salonId = { in: salons.map((s) => s.id) };
@@ -392,8 +400,15 @@ export class AppointmentsService {
   }
 
   async updateStatus(id: string, userId: string, dto: UpdateAppointmentStatusDto) {
-    const appt = await this.prisma.appointment.findUnique({ where: { id } });
-    if (!appt) throw new NotFoundException('Appointment not found');
+    const [updated] = await this.updateStatuses([{ id, ...dto }], userId);
+    return updated;
+  }
+
+  async updateStatuses(updates: UpdateAppointmentStatusesDto['updates'], userId: string) {
+    const appointmentIds = updates.map((update) => update.id);
+    if (new Set(appointmentIds).size !== appointmentIds.length) {
+      throw new BadRequestException('Each appointment can be updated only once per request');
+    }
 
     const actor = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -406,54 +421,71 @@ export class AppointmentsService {
       throw new ForbiddenException('Customers are not allowed to change appointment status');
     }
 
+    const appointments = await this.prisma.appointment.findMany({
+      where: { id: { in: appointmentIds } },
+    });
+    if (appointments.length !== appointmentIds.length) {
+      throw new NotFoundException('One or more appointments were not found');
+    }
+    const appointmentsById = new Map(appointments.map((appointment) => [appointment.id, appointment]));
+
     if (actor.role === UserRole.STAFF) {
       const staffProfile = await this.prisma.staff.findFirst({
-        where: { userId, salonId: appt.salonId, isActive: true },
+        where: { userId, isActive: true },
       });
       if (!staffProfile) throw new ForbiddenException('Staff can update appointments only in their salon');
-      if (appt.staffId !== staffProfile.id) {
+      if (appointments.some((appointment) => appointment.staffId !== staffProfile.id)) {
         throw new ForbiddenException('Staff can update only their own appointments');
       }
     }
 
     if (actor.role === UserRole.SALON_OWNER) {
-      const ownsSalon = await this.prisma.salon.findFirst({
-        where: { id: appt.salonId, ownerId: userId },
+      const salonIds = [...new Set(appointments.map((appointment) => appointment.salonId))];
+      const ownedSalons = await this.prisma.salon.findMany({
+        where: { id: { in: salonIds }, ownerId: userId },
         select: { id: true },
       });
-      if (!ownsSalon) throw new ForbiddenException('Not authorized to update this appointment');
+      if (ownedSalons.length !== salonIds.length) {
+        throw new ForbiddenException('Not authorized to update one or more appointments');
+      }
     }
 
-    const newStatus = dto.status as AppointmentStatus;
     const canOverrideTransitions = actor.role === UserRole.ADMIN || actor.role === UserRole.SALON_OWNER;
-    if (!canOverrideTransitions) {
-      const allowed = VALID_TRANSITIONS[appt.status] ?? [];
-      if (!allowed.includes(newStatus)) {
-        throw new BadRequestException(`Cannot transition from ${appt.status} to ${newStatus}`);
+    for (const update of updates) {
+      const appointment = appointmentsById.get(update.id)!;
+      const newStatus = update.status as AppointmentStatus;
+      if (!canOverrideTransitions) {
+        const allowed = VALID_TRANSITIONS[appointment.status] ?? [];
+        if (!allowed.includes(newStatus)) {
+          throw new BadRequestException(`Cannot transition from ${appointment.status} to ${newStatus}`);
+        }
       }
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const result = await tx.appointment.update({
-        where: { id },
-        data: { status: newStatus },
-        include: {
-          salon: { select: { id: true, name: true } },
-          service: { select: { id: true, name: true } },
-          customer: { select: { id: true, firstName: true } },
-        },
-      });
+      return Promise.all(updates.map(async (update) => {
+        const result = await tx.appointment.update({
+          where: { id: update.id },
+          data: { status: update.status as AppointmentStatus },
+          include: {
+            salon: { select: { id: true, name: true } },
+            service: { select: { id: true, name: true } },
+            customer: { select: { id: true, firstName: true } },
+          },
+        });
 
-      await tx.appointmentStatusHistory.create({
-        data: { appointmentId: id, status: newStatus, changedById: userId, note: dto.note },
-      });
+        await tx.appointmentStatusHistory.create({
+          data: { appointmentId: update.id, status: update.status as AppointmentStatus, changedById: userId, note: update.note },
+        });
 
-      return result;
+        return result;
+      }));
     });
 
-    // Real-time notification
-    this.gateway.emitToSalon(updated.salonId, 'appointment:status', { appointment: updated });
-    this.gateway.emitToUser(updated.customer.id, 'appointment:status', { appointment: updated });
+    updated.forEach((appointment) => {
+      this.gateway.emitToSalon(appointment.salonId, 'appointment:status', { appointment });
+      this.gateway.emitToUser(appointment.customer.id, 'appointment:status', { appointment });
+    });
 
     return updated;
   }

@@ -8,6 +8,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { useState } from 'react';
+import { ContentLoader } from '@/shared/components/PageLoader';
 
 export default function CustomerAppointmentDetailsPage() {
   const { appointmentId } = useParams();
@@ -34,7 +35,7 @@ export default function CustomerAppointmentDetailsPage() {
   });
 
   if (isLoading || !appt) {
-    return <p className="text-sm text-muted-foreground">Loading appointment...</p>;
+    return <ContentLoader label="Loading appointment..." />;
   }
 
   const canCancel = ['PENDING', 'CONFIRMED'].includes(appt.status);

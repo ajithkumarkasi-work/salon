@@ -60,3 +60,24 @@ export function useSalon(id: string) {
     enabled: !!id,
   });
 }
+
+export function useSalonCategories() {
+  return useQuery({
+    queryKey: [...salonKeys.all, 'categories'],
+    queryFn: async () => {
+      const { data } = await api.get('/salons/categories');
+      return data;
+    },
+  });
+}
+
+export function useCreateSalon() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (dto: any) => {
+      const { data } = await api.post('/salons', dto);
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: salonKeys.mine() }),
+  });
+}

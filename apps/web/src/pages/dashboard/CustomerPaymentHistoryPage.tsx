@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { api } from '@/shared/lib/api';
 import { Card, CardContent } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
+import { ContentLoader } from '@/shared/components/PageLoader';
 
 const STATUS_COLORS: Record<string, string> = {
   SUCCEEDED: 'bg-green-100 text-green-800',
@@ -26,11 +27,10 @@ export default function CustomerPaymentHistoryPage() {
 
       <Card>
         <CardContent className="p-0">
+          {isLoading ? <ContentLoader label="Loading payment history..." /> : <>
           {/* Mobile cards */}
           <div className="md:hidden p-3 space-y-3">
-            {isLoading && <p className="text-sm text-muted-foreground">Loading payment history...</p>}
-
-            {!isLoading && (data?.data ?? []).map((payment: any) => (
+            {(data?.data ?? []).map((payment: any) => (
               <div key={payment.id} className="rounded-lg border p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -46,7 +46,7 @@ export default function CustomerPaymentHistoryPage() {
               </div>
             ))}
 
-            {!isLoading && !(data?.data ?? []).length && (
+            {!(data?.data ?? []).length && (
               <p className="text-sm text-muted-foreground">No payments yet.</p>
             )}
           </div>
@@ -63,13 +63,7 @@ export default function CustomerPaymentHistoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {isLoading
-                  ? (
-                    <tr>
-                      <td className="px-4 py-3 text-muted-foreground" colSpan={4}>Loading payment history...</td>
-                    </tr>
-                  )
-                  : (data?.data ?? []).map((payment: any) => (
+                {(data?.data ?? []).map((payment: any) => (
                       <tr key={payment.id} className="border-b last:border-b-0 hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3">
                           <p className="font-medium">{payment.appointment?.salon?.name}</p>
@@ -82,7 +76,7 @@ export default function CustomerPaymentHistoryPage() {
                         <td className="px-4 py-3 text-right font-semibold">₹{Number(payment.amount).toFixed(2)}</td>
                       </tr>
                     ))}
-                {!isLoading && !(data?.data ?? []).length && (
+                {!(data?.data ?? []).length && (
                   <tr>
                     <td className="px-4 py-3 text-muted-foreground" colSpan={4}>No payments yet.</td>
                   </tr>
@@ -90,6 +84,7 @@ export default function CustomerPaymentHistoryPage() {
               </tbody>
             </table>
           </div>
+          </>}
         </CardContent>
       </Card>
     </div>

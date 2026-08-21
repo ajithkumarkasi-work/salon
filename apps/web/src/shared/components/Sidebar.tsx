@@ -16,6 +16,7 @@ import {
   BarChart3,
   Settings,
   UserCheck,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import { useAuthStore } from '@/shared/stores/auth.store';
@@ -34,6 +35,7 @@ const navItems = [
   { label: 'Offers', path: '/dashboard/offers', icon: Tag },
   { label: 'Reviews', path: '/dashboard/reviews', icon: Star },
   { label: 'Analytics', path: '/dashboard/analytics', icon: BarChart3 },
+  { label: 'Users', path: '/dashboard/admin/users', icon: ShieldCheck },
   { label: 'Settings', path: '/dashboard/settings', icon: Settings },
 ];
 
@@ -54,7 +56,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { user } = useAuthStore();
   const isBusinessRole = user?.role === UserRole.SALON_OWNER || user?.role === UserRole.ADMIN;
+  const isAdmin = user?.role === UserRole.ADMIN;
   const visibleNavItems = user?.role === UserRole.CUSTOMER ? customerNavItems : navItems.filter((item) => {
+    if (item.label === 'Users') return isAdmin;
     if (['Overview', 'Staff', 'Customers', 'Payments', 'Offers', 'Analytics'].includes(item.label)) {
       return isBusinessRole;
     }

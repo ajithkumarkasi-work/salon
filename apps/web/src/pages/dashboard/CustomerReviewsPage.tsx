@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { Star } from 'lucide-react';
+import { ContentLoader } from '@/shared/components/PageLoader';
 
 function renderSelectableStars(value: number, onSelect: (rating: number) => void) {
   return (
@@ -74,7 +75,7 @@ export default function CustomerReviewsPage() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading completed bookings...</p>
+        <ContentLoader label="Loading completed bookings..." />
       ) : (
         <div className="space-y-3">
           {(data ?? []).map((appt: any) => {

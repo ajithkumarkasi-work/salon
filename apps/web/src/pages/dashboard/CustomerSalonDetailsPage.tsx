@@ -4,6 +4,7 @@ import { ArrowLeft, Star } from 'lucide-react';
 import { api } from '@/shared/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
+import { Skeleton } from '@/shared/components/Skeleton';
 
 function toArray<T = any>(payload: any): T[] {
   if (Array.isArray(payload)) return payload;
@@ -29,7 +30,7 @@ export default function CustomerSalonDetailsPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
-  const { data: salon, isLoading } = useQuery({
+  const { data: salon, isLoading, isError, refetch } = useQuery({
     queryKey: ['customer-salon', salonId],
     queryFn: async () => {
       const raw = (await api.get(`/salons/${salonId}`)).data;
@@ -76,8 +77,30 @@ export default function CustomerSalonDetailsPage() {
     },
   });
 
-  if (isLoading || !salon) {
-    return <p className="text-sm text-muted-foreground">Loading salon details...</p>;
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-5 animate-fade-in" aria-label="Loading salon details">
+        <Skeleton className="h-9 w-32" />
+        <Card><CardContent className="space-y-4 p-5"><Skeleton className="h-8 w-2/5" /><Skeleton className="h-4 w-3/5" /><Skeleton className="h-10 w-full sm:w-72" /></CardContent></Card>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2"><CardContent className="space-y-3 p-5"><Skeleton className="h-5 w-24" /><Skeleton className="h-14" /><Skeleton className="h-14" /></CardContent></Card>
+          <Card><CardContent className="space-y-3 p-5"><Skeleton className="h-5 w-16" /><Skeleton className="h-14" /><Skeleton className="h-14" /></CardContent></Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError || !salon) {
+    return (
+      <div className="mx-auto flex min-h-[360px] max-w-5xl flex-col items-center justify-center gap-3 text-center animate-fade-in">
+        <h1 className="text-xl font-semibold">Salon details are unavailable</h1>
+        <p className="max-w-sm text-sm text-muted-foreground">We could not load this salon. Check your connection and try again.</p>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={() => navigate('/dashboard/explore')}>Back to Explore</Button>
+          <Button type="button" onClick={() => refetch()}>Try Again</Button>
+        </div>
+      </div>
+    );
   }
 
   const visibleServices = toArray(services).slice(0, 8);

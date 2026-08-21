@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { demoApiAdapter } from '@/shared/lib/demo-api';
+import { toast } from '@/shared/hooks/use-toast';
 
 const configuredApiUrl = String(import.meta.env.VITE_API_URL ?? '').trim();
 const normalizeApiBaseUrl = (url: string): string => {
@@ -53,6 +54,11 @@ api.interceptors.response.use(
       const { refreshToken, setTokens, logout } = useAuthStore.getState();
 
       if (!refreshToken) {
+        toast({
+          variant: 'destructive',
+          title: 'Session expired',
+          description: 'Please sign in again to continue.',
+        });
         logout();
         return Promise.reject(error);
       }
@@ -69,6 +75,11 @@ api.interceptors.response.use(
       } catch {
         failedQueue.forEach(({ reject }) => reject(error));
         failedQueue = [];
+        toast({
+          variant: 'destructive',
+          title: 'Session expired',
+          description: 'Please sign in again to continue.',
+        });
         logout();
         return Promise.reject(error);
       } finally {

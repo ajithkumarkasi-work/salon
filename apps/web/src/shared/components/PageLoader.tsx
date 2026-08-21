@@ -12,3 +12,12 @@ export function PageLoader() {
     </div>
   );
 }
+
+export function ContentLoader({ label = 'Loading...' }: { label?: string }) {
+  return (
+    <div className="flex min-h-48 flex-col items-center justify-center gap-3 py-8 text-center" role="status" aria-live="polite">
+      <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
+      <p className="text-sm font-medium text-muted-foreground">{label}</p>
+    </div>
+  );
+}

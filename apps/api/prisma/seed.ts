@@ -1,10 +1,15 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🌱 Seeding GlowBook database...');
+
+  if (await prisma.salon.count()) {
+    console.log('Demo data already exists; skipping seed.');
+    return;
+  }
 
   // ─── Salon Categories ───────────────────────────────────────────────────────
   const categories = await Promise.all([
@@ -114,10 +119,19 @@ async function main() {
     ['Nisha', 'Pillai'], ['Aishwarya', 'Bose'],
   ];
 
-  const customers = await Promise.all(
-    customerNames.map(([firstName, lastName]) =>
-      prisma.user.create({
-        data: {
+  const customers: User[] = [];
+  for (const [firstName, lastName] of customerNames) {
+    customers.push(
+      await prisma.user.upsert({
+        where: { email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@glowbook.demo` },
+        update: {
+          firstName,
+          lastName,
+          role: 'CUSTOMER',
+          emailVerified: true,
+          isActive: true,
+        },
+        create: {
           email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@glowbook.demo`,
           passwordHash,
           firstName,
@@ -125,9 +139,9 @@ async function main() {
           role: 'CUSTOMER',
           emailVerified: true,
         },
-      })
-    )
-  );
+      }),
+    );
+  }
 
   // ─── Salons ─────────────────────────────────────────────────────────────────
   const salonData = [
@@ -360,9 +374,10 @@ async function main() {
   // ─── Appointments ─────────────────────────────────────────────────────────────
   const allCustomers = [customerUser, ...customers];
   const now = new Date();
+  const shouldCreateAppointments = (await prisma.appointment.count()) === 0;
 
   let appointmentCount = 0;
-  for (let dayOffset = -60; dayOffset <= 30; dayOffset++) {
+  for (let dayOffset = -60; shouldCreateAppointments && dayOffset <= 30; dayOffset++) {
     if (appointmentCount >= 500) break;
 
     const appointmentDate = new Date(now);

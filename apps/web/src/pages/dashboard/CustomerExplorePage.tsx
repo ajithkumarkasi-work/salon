@@ -5,6 +5,7 @@ import { Star } from 'lucide-react';
 import { api } from '@/shared/lib/api';
 import { Input } from '@/shared/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
+import { ContentLoader } from '@/shared/components/PageLoader';
 
 function renderStars(ratingValue: number) {
   const rounded = Math.max(0, Math.min(5, Math.round(ratingValue)));
@@ -49,7 +50,7 @@ export default function CustomerExplorePage() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading salons...</p>
+        <ContentLoader label="Loading salons..." />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
           {salons.map((salon: any) => (

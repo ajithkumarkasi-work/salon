@@ -148,8 +148,17 @@ export const CancelAppointmentSchema = z.object({
 });
 
 export const UpdateAppointmentStatusSchema = z.object({
-  status: z.enum(['CONFIRMED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'NO_SHOW']),
+  status: z.enum(['PENDING', 'CONFIRMED', 'ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW']),
   note: z.string().max(500).optional(),
+});
+
+export const UpdateAppointmentStatusesSchema = z.object({
+  updates: z.array(
+    z.object({
+      id: z.string().uuid(),
+      ...UpdateAppointmentStatusSchema.shape,
+    }),
+  ).min(1).max(50),
 });
 
 // ─── Review ───────────────────────────────────────────────────────────────────
@@ -242,6 +251,7 @@ export type CreateAppointmentDto = z.infer<typeof CreateAppointmentSchema>;
 export type RescheduleAppointmentDto = z.infer<typeof RescheduleAppointmentSchema>;
 export type CancelAppointmentDto = z.infer<typeof CancelAppointmentSchema>;
 export type UpdateAppointmentStatusDto = z.infer<typeof UpdateAppointmentStatusSchema>;
+export type UpdateAppointmentStatusesDto = z.infer<typeof UpdateAppointmentStatusesSchema>;
 export type CreateReviewDto = z.infer<typeof CreateReviewSchema>;
 export type CreateCouponDto = z.infer<typeof CreateCouponSchema>;
 export type UpdateCouponDto = z.infer<typeof UpdateCouponSchema>;

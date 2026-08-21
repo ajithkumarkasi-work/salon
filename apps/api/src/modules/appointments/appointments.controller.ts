@@ -19,6 +19,7 @@ import {
   RescheduleAppointmentDto,
   CancelAppointmentDto,
   UpdateAppointmentStatusDto,
+  UpdateAppointmentStatusesDto,
 } from '@glowbook/validation';
 
 @ApiTags('appointments')
@@ -82,6 +83,15 @@ export class AppointmentsController {
     @Body() dto: UpdateAppointmentStatusDto,
   ) {
     return this.appointments.updateStatus(id, user.id, dto);
+  }
+
+  @Patch('statuses')
+  @ApiOperation({ summary: 'Update one or more appointment statuses' })
+  updateStatuses(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: UpdateAppointmentStatusesDto,
+  ) {
+    return this.appointments.updateStatuses(dto.updates, user.id);
   }
 
   @Post(':id/cancel')

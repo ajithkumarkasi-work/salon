@@ -7,10 +7,12 @@ import { getInitials } from '@/shared/lib/utils';
 import { api } from '@/shared/lib/api';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '@glowbook/shared-types';
+import { useState } from 'react';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user, refreshToken, logout } = useAuthStore();
   const navigate = useNavigate();
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
   const { data: notifications = [] } = useQuery({
     queryKey: ['customer-notifications'],
@@ -23,6 +25,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const unreadCount = notifications.filter((n: any) => !n.isRead).length;
 
   const handleLogout = async () => {
+    setIsLogoutConfirmOpen(false);
     try {
       await api.post('/auth/logout', { refreshToken });
     } catch {
@@ -81,11 +84,26 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
               </Avatar>
             </button>
           )}
-          <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Logout">
+          <Button variant="ghost" size="icon" onClick={() => setIsLogoutConfirmOpen(true)} aria-label="Logout">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </div>
+
+      {isLogoutConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-labelledby="logout-confirmation-title">
+          <div className="w-full max-w-sm rounded-lg border bg-background shadow-lg">
+            <div className="border-b px-5 py-4">
+              <h2 id="logout-confirmation-title" className="text-base font-semibold">Log out?</h2>
+              <p className="mt-1 text-sm text-muted-foreground">You will need to sign in again to access your account.</p>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4">
+              <Button type="button" variant="outline" onClick={() => setIsLogoutConfirmOpen(false)}>Cancel</Button>
+              <Button type="button" onClick={handleLogout}>Log out</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

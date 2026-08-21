@@ -8,7 +8,10 @@ import { useAnalyticsSummary, useRevenueChart, usePopularServices } from '@/feat
 import { useAppointments } from '@/features/appointments/hooks';
 import { useSalonStore } from '@/shared/stores/salon.store';
 import { useAuthStore } from '@/shared/stores/auth.store';
-import { useOwnerSalons } from '@/features/salons/hooks';
+import { useOwnerSalons, useCreateSalon, useSalonCategories } from '@/features/salons/hooks';
+import { Input } from '@/shared/components/ui/input';
+import { CustomSelect } from '@/shared/components/ui/custom-select';
+import { useToast } from '@/shared/hooks/use-toast';
 import { formatCurrency, formatTime, getStatusColor, getInitials } from '@/shared/lib/utils';
 import { Skeleton, StatCardSkeleton } from '@/shared/components/Skeleton';
 import { UserRole } from '@glowbook/shared-types';
@@ -426,12 +429,107 @@ export default function OverviewPage() {
 }
 
 function EmptyState() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
       <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
       <h2 className="text-xl font-semibold mb-2">No salon found</h2>
       <p className="text-muted-foreground mb-6">Create a salon or select one to load overview data.</p>
-      <Button>Create your first salon</Button>
+      <Button onClick={() => setIsModalOpen(true)}>Create your first salon</Button>
+      {isModalOpen && <CreateSalonModal onClose={() => setIsModalOpen(false)} />}
+    </div>
+  );
+}
+
+function CreateSalonModal({ onClose }: { onClose: () => void }) {
+  const { toast } = useToast();
+  const { setActiveSalon } = useSalonStore();
+  const { data: categories } = useSalonCategories();
+  const createSalon = useCreateSalon();
+
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [zipCode, setZipCode] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [priceRange, setPriceRange] = useState('2');
+
+  const categoryOptions = (categories ?? []).map((c: any) => ({ value: c.id, label: c.name }));
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !phone.trim() || !email.trim() || !address.trim() || !city.trim() || !state.trim() || !zipCode.trim() || !categoryId) {
+      toast({ variant: 'destructive', title: 'Missing details', description: 'Please fill in all fields.' });
+      return;
+    }
+
+    try {
+      const salon = await createSalon.mutateAsync({
+        name: name.trim(),
+        phone: phone.trim(),
+        email: email.trim().toLowerCase(),
+        address: address.trim(),
+        city: city.trim(),
+        state: state.trim(),
+        zipCode: zipCode.trim(),
+        categoryId,
+        priceRange: Number(priceRange),
+      });
+      setActiveSalon(salon.id);
+      toast({ title: 'Salon created', variant: 'success' as any });
+      onClose();
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to create salon',
+        description: error?.response?.data?.message ?? 'Please try again.',
+      });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <CardContent className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Create your salon</h2>
+
+          <Input placeholder="Salon name" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input placeholder="Phone (e.g. +919876543210)" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          <Input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <Input placeholder="City" value={city} onChange={(e) => setCity(e.target.value)} />
+            <Input placeholder="State" value={state} onChange={(e) => setState(e.target.value)} />
+          </div>
+          <Input placeholder="Zip code" value={zipCode} onChange={(e) => setZipCode(e.target.value)} />
+          <CustomSelect
+            value={categoryId}
+            onChange={setCategoryId}
+            options={categoryOptions}
+            placeholder="Select category"
+          />
+          <CustomSelect
+            value={priceRange}
+            onChange={setPriceRange}
+            options={[
+              { value: '1', label: '$ Budget' },
+              { value: '2', label: '$$ Moderate' },
+              { value: '3', label: '$$$ Premium' },
+              { value: '4', label: '$$$$ Luxury' },
+            ]}
+          />
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={onClose} disabled={createSalon.isPending}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={createSalon.isPending}>
+              {createSalon.isPending ? 'Creating…' : 'Create salon'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -50,7 +50,8 @@ export default function CustomersPage() {
     enabled: !!activeSalonId,
   });
 
-  const canOpenCustomerDrawer = user?.role === UserRole.ADMIN;
+  const canOpenCustomerDrawer =
+    user?.role === UserRole.ADMIN || user?.role === UserRole.SALON_OWNER;
 
   const selectedCustomer = useMemo(
     () => (data ?? []).find((customer: any) => customer.id === selectedCustomerId) ?? null,

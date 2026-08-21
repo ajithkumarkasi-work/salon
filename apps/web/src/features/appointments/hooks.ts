@@ -59,6 +59,17 @@ export function useUpdateAppointmentStatus() {
   });
 }
 
+export function useUpdateAppointmentStatuses() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ updates }: { updates: Array<{ id: string; status: string; note?: string }> }) => {
+      const { data } = await api.patch('/appointments/statuses', { updates });
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.all }),
+  });
+}
+
 export function useCreateAppointment() {
   const qc = useQueryClient();
   return useMutation({

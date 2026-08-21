@@ -16,7 +16,7 @@ A production-quality, full-stack **Salon & Spa Appointment Booking Platform** bu
 
 ## Live URLs
 
-- Web App (Vercel): `https://salon-web-nine-theta.vercel.app`
+- Web App (GitHub Pages): `https://ajithkumarkasi-work.github.io/salon/`
 - API Base (Production): `https://salon-api-ubfz.onrender.com/api/v1`
 - Swagger (Production): `https://salon-api-ubfz.onrender.com/api/docs`
 
@@ -308,7 +308,8 @@ This uses `build:render` in [apps/api/package.json](apps/api/package.json), whic
 
 1. Prisma client generation
 2. Prisma schema push (`prisma db push`)
-3. NestJS build
+3. Idempotent demo-data seed (`prisma db seed`)
+4. NestJS build
 
 This repository does not currently include a Prisma `migrations/` directory under [apps/api/prisma](apps/api/prisma), so `prisma db push` is the correct bootstrap mechanism for the initial production database setup. Once migrations are added and committed, switch this deployment step to `prisma migrate deploy`.
 
@@ -375,7 +376,7 @@ All demo accounts use password: **`GlowBook2024`**
 ### Recommended setup (GitHub)
 
 - Deploy backend (`apps/api`) to a Node host (Render, Railway, Fly.io, EC2, etc.)
-- Deploy frontend (`apps/web`) to a static/web host (Vercel, Netlify, Cloudflare Pages)
+- Deploy frontend (`apps/web`) to GitHub Pages
 - Build mobile (`apps/mobile`) with EAS (Expo cloud)
 
 ### 1) Backend deploy checklist (`apps/api`)
@@ -416,10 +417,9 @@ npx prisma db seed
 
 ### 2) Frontend deploy checklist (`apps/web`)
 
-- Root directory: `apps/web`
-- Install command: `npm install`
-- Build command: `npm run build`
-- Output directory: `dist`
+- Deployment target: GitHub Pages via `.github/workflows/web-ci-deploy.yml`
+- Build command used by workflow: `npm run -w apps/web build -- --base=/salon/`
+- Output directory: `apps/web/dist`
 
 Required environment variables:
 
@@ -430,6 +430,8 @@ Important:
 
 - Do not keep `VITE_API_URL` on localhost after deploy.
 - Add your frontend URL to backend `ALLOWED_ORIGINS`.
+- GitHub Pages URL for this repo is `https://ajithkumarkasi-work.github.io/salon/`.
+- The workflow copies `index.html` to `404.html` so deep-link refreshes keep working on GitHub Pages.
 
 ### 3) Mobile build checklist (`apps/mobile`)
 
