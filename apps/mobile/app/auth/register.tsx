@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { getFirebaseErrorMessage, registerWithEmail } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth.store';
 
 export default function RegisterScreen() {
@@ -15,22 +15,20 @@ export default function RegisterScreen() {
   const [password, setPassword] = useState('');
 
   const register = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post('/auth/register', {
+    mutationFn: async () =>
+      registerWithEmail({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim() || undefined,
         password,
-      });
-      return data;
-    },
-    onSuccess: (data) => {
-      setAuth(data.user, data.tokens.accessToken, data.tokens.refreshToken);
+      }),
+    onSuccess: (user) => {
+      setAuth(user, '', '');
       router.replace('/(tabs)');
     },
     onError: (err: any) => {
-      Alert.alert('Registration failed', err?.response?.data?.message ?? 'Please try again.');
+      Alert.alert('Registration failed', getFirebaseErrorMessage(err));
     },
   });
 

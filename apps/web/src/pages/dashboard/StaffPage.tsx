@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Plus, Star, Edit, Trash2 } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Star, Edit, Trash2, Users, CalendarOff } from 'lucide-react';
 import { Card, CardContent } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -13,11 +14,13 @@ import { useToast } from '@/shared/hooks/use-toast';
 import { useCreateStaff, useDeleteStaff, useStaff, useUpdateStaff } from '@/features/staff/hooks';
 import { useServices } from '@/features/services/hooks';
 import { UserRole } from '@glowbook/shared-types';
+import { isOnStaffLeave, listStaffLeaves, staffLeavesService } from '@/shared/lib/firebase';
 import { CreateStaffDto, UpdateStaffDto } from '@glowbook/validation';
 
 export default function StaffPage() {
   const { activeSalonId } = useSalonStore();
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: staff, isLoading } = useStaff(activeSalonId ?? '');
   const { data: services } = useServices(activeSalonId ?? '');
@@ -36,8 +39,21 @@ export default function StaffPage() {
   const [bio, setBio] = useState('');
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [staffToDeactivate, setStaffToDeactivate] = useState<any | null>(null);
+  const [leaveStartDate, setLeaveStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [leaveEndDate, setLeaveEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [leaveReason, setLeaveReason] = useState('');
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
   const canManageStaff = user?.role === UserRole.SALON_OWNER || user?.role === UserRole.ADMIN;
   const staffTitle = 'Staff';
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: activeLeaves = {} } = useQuery({
+    queryKey: ['staff-leaves', activeSalonId],
+    queryFn: async () => {
+      const entries = await Promise.all((staff ?? []).map(async (member: any) => [member.id, await listStaffLeaves(member.id)] as const));
+      return Object.fromEntries(entries);
+    },
+    enabled: !!activeSalonId && !!staff?.length,
+  });
 
   const resetForm = () => {
     setFirstName('');
@@ -66,7 +82,7 @@ export default function StaffPage() {
     setPhone(member.user?.phone ?? '');
     setRole(member.role ?? 'Stylist');
     setBio(member.bio ?? '');
-    setSelectedServiceIds((member.services ?? []).map((s: any) => s.service?.id).filter(Boolean));
+    setSelectedServiceIds((member.serviceIds ?? []).filter(Boolean));
     setIsEditorOpen(true);
   };
 
@@ -109,7 +125,7 @@ export default function StaffPage() {
           bio: bio.trim() || undefined,
           serviceIds: selectedServiceIds,
         };
-        await updateStaff.mutateAsync({ id: editingStaff.id, dto });
+        await updateStaff.mutateAsync({ id: editingStaff.id, dto, userId: editingStaff.userId });
         toast({ title: 'Staff updated', variant: 'success' as any });
       } else {
         const dto: CreateStaffDto = {
@@ -154,6 +170,33 @@ export default function StaffPage() {
     }
   };
 
+  const handleSubmitLeave = async () => {
+    const ownStaff = staff?.find((member: any) => member.userId === user?.id);
+    if (!user || !ownStaff || !activeSalonId || leaveEndDate < leaveStartDate) {
+      toast({ variant: 'destructive', title: 'Invalid leave dates', description: 'Select a valid leave date range.' });
+      return;
+    }
+    setIsSubmittingLeave(true);
+    try {
+      await staffLeavesService.create({
+        staffId: ownStaff.id,
+        userId: user.id,
+        salonId: activeSalonId,
+        startDate: leaveStartDate,
+        endDate: leaveEndDate,
+        reason: leaveReason.trim() || null,
+        isApproved: true,
+      });
+      toast({ title: 'Leave added', description: 'You will be unavailable for bookings during these dates.', variant: 'success' as any });
+      setLeaveReason('');
+      await queryClient.invalidateQueries({ queryKey: ['staff-leaves', activeSalonId] });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Could not add leave', description: error?.message ?? 'Please try again.' });
+    } finally {
+      setIsSubmittingLeave(false);
+    }
+  };
+
   useEffect(() => {
     if (!isEditorOpen) return;
 
@@ -195,6 +238,25 @@ export default function StaffPage() {
           </Button>
         )}
       </div>
+
+      {user?.role === UserRole.STAFF && (
+        <Card>
+          <CardContent className="space-y-3 p-5">
+            <div className="flex items-center gap-2">
+              <CalendarOff className="h-4 w-4 text-muted-foreground" />
+              <p className="font-semibold">Add leave</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Input type="date" value={leaveStartDate} onChange={(event) => setLeaveStartDate(event.target.value)} />
+              <Input type="date" value={leaveEndDate} onChange={(event) => setLeaveEndDate(event.target.value)} />
+              <Input value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} placeholder="Reason (optional)" />
+            </div>
+            <Button type="button" onClick={handleSubmitLeave} loading={isSubmittingLeave}>
+              Add leave
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {isEditorOpen && canManageStaff && (
         <div
@@ -325,21 +387,18 @@ export default function StaffPage() {
             </div>
           ))}
         </div>
+      ) : !staff?.length ? (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground bg-card border rounded-xl">
+          <Users className="h-10 w-10 mb-3 opacity-40" />
+          <p className="font-medium">No staff members found</p>
+          <p className="text-sm mt-1">
+            {canManageStaff
+              ? 'Add your first staff member to start assigning services and taking bookings.'
+              : 'No staff profile data is available right now.'}
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {!staff?.length && (
-            <Card className="md:col-span-2 lg:col-span-3">
-              <CardContent className="p-6 text-center">
-                <p className="font-medium">No staff members found</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {canManageStaff
-                    ? 'Add your first staff member to start assigning services and taking bookings.'
-                    : 'No staff profile data is available right now.'}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
           {staff?.map((member: any) => (
             <Card key={member.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-5">
@@ -350,6 +409,9 @@ export default function StaffPage() {
                   <div className="flex-1">
                     <p className="font-semibold">{member.user?.firstName} {member.user?.lastName}</p>
                     <p className="text-sm text-muted-foreground">{member.role}</p>
+                    {isOnStaffLeave(activeLeaves[member.id] ?? [], today) && (
+                      <Badge variant="destructive" className="mt-1">On leave</Badge>
+                    )}
                   </div>
                   {canManageStaff && (
                     <div className="flex gap-1">
@@ -368,9 +430,12 @@ export default function StaffPage() {
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">Services she provides</p>
                   <div className="flex gap-1 flex-wrap">
-                    {member.services?.length ? member.services.map((s: any) => (
-                      <Badge key={s.service?.id ?? s.id} variant="secondary" className="text-xs">{s.service?.name ?? s.name}</Badge>
-                    )) : <Badge variant="outline" className="text-xs">No services assigned</Badge>}
+                    {member.serviceIds?.length ? member.serviceIds.map((id: string) => {
+                      const service = (services ?? []).find((s: any) => s.id === id);
+                      return (
+                        <Badge key={id} variant="secondary" className="text-xs">{service?.name ?? 'Unknown service'}</Badge>
+                      );
+                    }) : <Badge variant="outline" className="text-xs">No services assigned</Badge>}
                   </div>
                 </div>
 

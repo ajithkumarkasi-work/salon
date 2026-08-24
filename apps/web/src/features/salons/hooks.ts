@@ -1,5 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/shared/lib/api';
+import {
+  listActiveSalons,
+  listSalonCategoriesWithDefaults,
+  listSalonsByOwner,
+  salonsService,
+} from '@/shared/lib/firebase';
 import { useSalonStore } from '@/shared/stores/salon.store';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { UserRole } from '@glowbook/shared-types';
@@ -20,14 +25,13 @@ export function useOwnerSalons() {
     queryKey: salonKeys.mine(),
     queryFn: async () => {
       if (user?.role === UserRole.SALON_OWNER) {
-        const { data } = await api.get('/salons/mine');
-        return data;
+        return listSalonsByOwner(user.id);
       }
 
       // Admin and non-owner roles consume the public salon list shape.
-      const { data } = await api.get('/salons', { params: { page: 1, limit: 100 } });
-      return data?.data ?? [];
+      return listActiveSalons();
     },
+    enabled: !!user,
   });
 
   useEffect(() => {
@@ -53,10 +57,7 @@ export function useOwnerSalons() {
 export function useSalon(id: string) {
   return useQuery({
     queryKey: salonKeys.detail(id),
-    queryFn: async () => {
-      const { data } = await api.get(`/salons/${id}`);
-      return data;
-    },
+    queryFn: () => salonsService.getById(id),
     enabled: !!id,
   });
 }
@@ -64,20 +65,36 @@ export function useSalon(id: string) {
 export function useSalonCategories() {
   return useQuery({
     queryKey: [...salonKeys.all, 'categories'],
-    queryFn: async () => {
-      const { data } = await api.get('/salons/categories');
-      return data;
-    },
+    queryFn: () => listSalonCategoriesWithDefaults(),
   });
 }
 
 export function useCreateSalon() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
   return useMutation({
     mutationFn: async (dto: any) => {
-      const { data } = await api.post('/salons', dto);
-      return data;
+      if (!user) throw new Error('You must be signed in to create a salon.');
+      if (user.role !== UserRole.SALON_OWNER) throw new Error('Only salon owners can create a salon.');
+      const slug = `${dto.name}-${Date.now()}`
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+      return salonsService.create({
+        ...dto,
+        slug,
+        ownerId: user.id,
+        description: null,
+        coverImageUrl: null,
+        logoUrl: null,
+        isActive: true,
+        isVerified: false,
+        rating: 0,
+        reviewCount: 0,
+      });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: salonKeys.mine() }),
   });
 }
+

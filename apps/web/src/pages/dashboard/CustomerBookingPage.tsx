@@ -1,73 +1,30 @@
 import { useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { api } from '@/shared/lib/api';
+import {
+  getAvailability,
+  findCouponByCode,
+  listServicesBySalon,
+  listStaffBySalon,
+  isOnStaffLeave,
+  listStaffLeaves,
+  salonsService,
+  withStaffUserProfiles,
+} from '@/shared/lib/firebase';
+import { useCreateAppointment } from '@/features/appointments/hooks';
+import { getFirebaseErrorMessage } from '@/shared/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { CustomSelect } from '@/shared/components/ui/custom-select';
-import { CreateAppointmentDto } from '@glowbook/validation';
-
-function toArray<T = any>(payload: any): T[] {
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data)) return payload.data;
-  if (Array.isArray(payload?.slots)) return payload.slots;
-  if (Array.isArray(payload?.results)) return payload.results;
-  return [];
-}
-
-type SlotOption = {
-  value: string;
-  label: string;
-  staffId?: string;
-  staffName?: string;
-  isAvailable?: boolean;
-};
+import { useToast } from '@/shared/hooks/use-toast';
 
 type StaffOption = {
   id: string;
   name: string;
   serviceIds: string[];
+  isOnLeave: boolean;
 };
-
-function normalizeSlots(payload: any): SlotOption[] {
-  const rawSlots: any[] = (() => {
-    if (Array.isArray(payload)) return payload;
-    if (Array.isArray(payload?.data)) return payload.data;
-    if (Array.isArray(payload?.slots)) return payload.slots;
-    if (payload && typeof payload === 'object') {
-      // Some environments return a single slot object instead of an array.
-      if (payload.time || payload.startTime || payload.slot || payload.value) return [payload];
-      if (payload.data && (payload.data.time || payload.data.startTime || payload.data.slot || payload.data.value)) return [payload.data];
-    }
-    return [];
-  })();
-
-  return rawSlots
-    .map((slot) => {
-      if (typeof slot === 'string' || typeof slot === 'number') {
-        const value = String(slot);
-        return { value, label: value };
-      }
-
-      if (slot && typeof slot === 'object') {
-        const timeValue = slot.time ?? slot.startTime ?? slot.slot ?? slot.value;
-        if (!timeValue) return null;
-        const value = String(timeValue);
-        const staffName = slot.staffName ?? slot.staff?.name ?? slot.staff?.fullName;
-        return {
-          value,
-          label: staffName ? `${value} · ${String(staffName)}` : value,
-          staffId: slot.staffId ? String(slot.staffId) : undefined,
-          staffName: staffName ? String(staffName) : undefined,
-          isAvailable: typeof slot.isAvailable === 'boolean' ? slot.isAvailable : undefined,
-        };
-      }
-
-      return null;
-    })
-    .filter((slot): slot is SlotOption => !!slot && slot.isAvailable !== false);
-}
 
 function nextDays(days: number) {
   const result: string[] = [];
@@ -84,6 +41,7 @@ export default function CustomerBookingPage() {
   const { salonId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { toast } = useToast();
   const [serviceId, setServiceId] = useState('');
   const [staffId, setStaffId] = useState('');
   const [date, setDate] = useState(nextDays(7)[0]);
@@ -93,93 +51,105 @@ export default function CustomerBookingPage() {
 
   const { data: salon } = useQuery({
     queryKey: ['book-salon', salonId],
-    queryFn: async () => (await api.get(`/salons/${salonId}`)).data,
+    queryFn: () => salonsService.getById(salonId!),
     enabled: !!salonId,
   });
 
-  const { data: servicesRaw } = useQuery({
+  const { data: services = [] } = useQuery({
     queryKey: ['book-services', salonId],
-    queryFn: async () => (await api.get(`/salons/${salonId}/services`)).data,
+    queryFn: () => listServicesBySalon(salonId!),
     enabled: !!salonId,
   });
 
-  const services = useMemo(() => toArray<any>(servicesRaw), [servicesRaw]);
-
-  const { data: staffRaw } = useQuery({
-    queryKey: ['book-staff', salonId],
-    queryFn: async () => (await api.get(`/salons/${salonId}/staff`)).data,
+  const { data: staff = [] } = useQuery({
+    queryKey: ['book-staff', salonId, date],
+    queryFn: async () => {
+      const members = await withStaffUserProfiles(await listStaffBySalon(salonId!));
+      return Promise.all(
+        members.map(async (member) => ({
+          ...member,
+          isOnLeave: isOnStaffLeave(await listStaffLeaves(member.id), date),
+        })),
+      );
+    },
     enabled: !!salonId,
   });
-
-  const staff = useMemo(() => toArray<any>(staffRaw), [staffRaw]);
 
   const staffOptions = useMemo<StaffOption[]>(() => {
-    return staff
-      .map((member: any) => {
-        const id = member?.id ? String(member.id) : '';
-        if (!id) return null;
-
-        const firstName = member?.user?.firstName ?? member?.firstName ?? '';
-        const lastName = member?.user?.lastName ?? member?.lastName ?? '';
-        const fallbackName = member?.name ?? member?.user?.name ?? 'Staff';
-        const composedName = `${firstName} ${lastName}`.trim() || String(fallbackName);
-
-        const serviceIds = (member?.services ?? [])
-          .map((s: any) => s?.serviceId ?? s?.id ?? s?.service?.id)
-          .filter(Boolean)
-          .map((s: any) => String(s));
-
-        return { id, name: composedName, serviceIds };
-      })
-      .filter((member): member is StaffOption => !!member);
+    return staff.map((member: any) => {
+      const firstName = member?.user?.firstName ?? '';
+      const lastName = member?.user?.lastName ?? '';
+      const composedName = `${firstName} ${lastName}`.trim() || member.role || 'Staff';
+      return { id: member.id, name: composedName, serviceIds: member.serviceIds ?? [], isOnLeave: member.isOnLeave };
+    });
   }, [staff]);
 
   const filteredStaff = useMemo(() => {
     if (!serviceId) return staffOptions;
-
     const matching = staffOptions.filter((member) => member.serviceIds.includes(serviceId));
-
     // If service relation data is missing, avoid blank dropdown by showing all staff.
     return matching.length ? matching : staffOptions;
   }, [staffOptions, serviceId]);
 
-  const { data: slotsRaw } = useQuery({
+  const { data: slots = [] } = useQuery({
     queryKey: ['book-slots', salonId, serviceId, staffId, date],
-    queryFn: async () =>
-      (
-        await api.get('/availability', {
-          params: { salonId, serviceId, staffId: staffId || undefined, date },
-        })
-      ).data,
+    queryFn: () => getAvailability({ salonId: salonId!, serviceId, staffId: staffId || undefined, date }),
     enabled: !!salonId && !!serviceId && !!date,
   });
 
-  const slots = useMemo(() => normalizeSlots(slotsRaw), [slotsRaw]);
-
   const selectedService = services.find((s: any) => s.id === serviceId);
   const subtotal = selectedService ? Number(selectedService.price) : 0;
-  const tax = subtotal * 0.18;
-  const total = subtotal + tax;
+  const normalizedCouponCode = couponCode.trim().toUpperCase();
+  const { data: coupon, isFetching: isCouponChecking } = useQuery({
+    queryKey: ['book-coupon', salonId, normalizedCouponCode],
+    queryFn: () => findCouponByCode(salonId!, normalizedCouponCode),
+    enabled: !!salonId && !!normalizedCouponCode,
+  });
 
-  const createBooking = useMutation({
-    mutationFn: async () => {
-      const payload: CreateAppointmentDto = {
+  const couponResult = useMemo(() => {
+    if (!normalizedCouponCode) return { discount: 0, message: '' };
+    if (isCouponChecking) return { discount: 0, message: 'Checking coupon...' };
+    if (!coupon) return { discount: 0, message: 'Coupon not found.' };
+
+    const now = Date.now();
+    const validFrom = Date.parse(coupon.validFrom);
+    const validUntil = Date.parse(coupon.validUntil);
+    if (!coupon.isActive || (Number.isFinite(validFrom) && now < validFrom) || (Number.isFinite(validUntil) && now > validUntil)) {
+      return { discount: 0, message: 'This coupon is not currently valid.' };
+    }
+    if (subtotal < Number(coupon.minAmount ?? 0)) {
+      return { discount: 0, message: `Minimum booking amount is ₹${Number(coupon.minAmount).toFixed(2)}.` };
+    }
+
+    const rawDiscount = coupon.type === 'PERCENTAGE' ? (subtotal * Number(coupon.value)) / 100 : Number(coupon.value);
+    const discount = coupon.maxDiscount == null ? rawDiscount : Math.min(rawDiscount, Number(coupon.maxDiscount));
+    return { discount: Math.min(discount, subtotal), message: `Coupon applied: ₹${Math.min(discount, subtotal).toFixed(2)} off.` };
+  }, [coupon, isCouponChecking, normalizedCouponCode, subtotal]);
+
+  const discount = couponResult.discount;
+  const tax = Math.round((subtotal - discount) * 0.18 * 100) / 100;
+  const total = Math.round((subtotal - discount + tax) * 100) / 100;
+
+  const createBooking = useCreateAppointment();
+
+  const handleConfirm = async () => {
+    try {
+      const appt = await createBooking.mutateAsync({
         salonId: salonId!,
         serviceId,
         staffId,
         startTime: new Date(`${date}T${time}:00`).toISOString(),
         couponCode: couponCode.trim() || undefined,
         notes: notes.trim() || undefined,
-      };
-      return (await api.post('/appointments', payload)).data;
-    },
-    onSuccess: (appt) => {
+      });
       // Mark customer appointment lists/details stale so back navigation shows latest booking.
       qc.invalidateQueries({ queryKey: ['customer-appointments-web'] });
       qc.invalidateQueries({ queryKey: ['customer-appointment-detail'] });
       navigate(`/dashboard/appointments/${appt.id}`);
-    },
-  });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Booking failed', description: getFirebaseErrorMessage(error) });
+    }
+  };
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -222,7 +192,13 @@ export default function CustomerBookingPage() {
               setTime('');
             }}
             placeholder="Any available staff"
-            options={filteredStaff.map((member) => ({ value: member.id, label: member.name }))}
+            options={filteredStaff.map((member) => ({
+              value: member.id,
+              label: member.name,
+              disabled: member.isOnLeave,
+              indicator: member.isOnLeave ? 'leave' as const : undefined,
+              description: member.isOnLeave ? 'On leave' : undefined,
+            }))}
           />
           <CustomSelect
             value={date}
@@ -239,9 +215,9 @@ export default function CustomerBookingPage() {
         <CardHeader className="pb-2"><CardTitle className="text-base">Slot</CardTitle></CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
-            {slots.map((slot, index) => {
-              const slotValue = String(slot.value ?? '');
-              const slotLabel = typeof slot.label === 'string' ? slot.label : slotValue;
+            {slots.filter((slot) => slot.isAvailable).map((slot, index) => {
+              const slotValue = slot.time;
+              const slotLabel = slot.staffName ? `${slotValue} · ${slot.staffName}` : slotValue;
 
               return (
               <button
@@ -274,6 +250,7 @@ export default function CustomerBookingPage() {
         <CardHeader className="pb-2"><CardTitle className="text-base">Offers & Notes</CardTitle></CardHeader>
         <CardContent className="space-y-3">
           <Input value={couponCode} onChange={(e) => setCouponCode(e.target.value)} placeholder="Coupon code (optional)" />
+          {!!normalizedCouponCode && <p className={`text-sm ${couponResult.discount > 0 ? 'text-green-600' : 'text-muted-foreground'}`}>{couponResult.message}</p>}
           <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes (optional)" />
         </CardContent>
       </Card>
@@ -282,6 +259,7 @@ export default function CustomerBookingPage() {
         <CardHeader className="pb-2"><CardTitle className="text-base">Checkout</CardTitle></CardHeader>
         <CardContent className="space-y-1 text-sm">
           <div className="flex justify-between"><span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span></div>
+          {discount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-₹{discount.toFixed(2)}</span></div>}
           <div className="flex justify-between"><span>Tax (18%)</span><span>₹{tax.toFixed(2)}</span></div>
           <div className="flex justify-between font-semibold pt-1"><span>Total</span><span>₹{total.toFixed(2)}</span></div>
           <p className="text-muted-foreground">Pay at salon: enabled</p>
@@ -290,7 +268,7 @@ export default function CustomerBookingPage() {
 
       <Button
         className="w-full"
-        onClick={() => createBooking.mutate()}
+        onClick={handleConfirm}
         disabled={!serviceId || !staffId || !time}
         loading={createBooking.isPending}
       >

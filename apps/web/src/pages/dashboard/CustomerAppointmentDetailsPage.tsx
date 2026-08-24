@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { ArrowLeft } from 'lucide-react';
-import { api } from '@/shared/lib/api';
+import { appointmentsService, enrichAppointments } from '@/shared/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -18,14 +18,21 @@ export default function CustomerAppointmentDetailsPage() {
 
   const { data: appt, isLoading } = useQuery({
     queryKey: ['customer-appointment-detail', appointmentId],
-    queryFn: async () => (await api.get(`/appointments/${appointmentId}`)).data,
+    queryFn: async () => {
+      const base = await appointmentsService.getById(appointmentId!);
+      if (!base) return null;
+      const [enriched] = await enrichAppointments([base]);
+      return enriched;
+    },
     enabled: !!appointmentId,
   });
 
   const cancel = useMutation({
     mutationFn: async () =>
-      api.post(`/appointments/${appointmentId}/cancel`, {
-        reason: cancelReason.trim() || 'Cancelled by customer',
+      appointmentsService.update(appointmentId!, {
+        status: 'CANCELLED' as any,
+        cancelledAt: new Date().toISOString(),
+        cancellationReason: cancelReason.trim() || 'Cancelled by customer',
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['customer-appointment-detail', appointmentId] });

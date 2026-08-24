@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/shared/components/ui/avatar';
@@ -8,6 +9,7 @@ import { useToast } from '@/shared/hooks/use-toast';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { getInitials } from '@/shared/lib/utils';
 import { useAdminUsers, useUpdateUserRole } from '@/features/admin/hooks';
+import { getFirebaseErrorMessage, isOnStaffLeave, listStaffLeaves, staffService } from '@/shared/lib/firebase';
 import { UserRole } from '@glowbook/shared-types';
 
 const roleOptions = [
@@ -24,6 +26,19 @@ export default function AdminUsersPage() {
   const updateRole = useUpdateUserRole();
   const [pendingSalonId, setPendingSalonId] = useState<{ userId: string; role: UserRole } | null>(null);
   const [salonIdInput, setSalonIdInput] = useState('');
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: staffMembers = [] } = useQuery({
+    queryKey: ['admin-staff-leaves'],
+    queryFn: () => staffService.list(),
+  });
+  const { data: leavesByStaff = {} } = useQuery({
+    queryKey: ['admin-user-leaves', staffMembers.map((member: any) => member.id).join(',')],
+    queryFn: async () => {
+      const entries = await Promise.all(staffMembers.map(async (member: any) => [member.id, await listStaffLeaves(member.id)] as const));
+      return Object.fromEntries(entries);
+    },
+    enabled: !!staffMembers.length,
+  });
 
   const handleRoleChange = async (userId: string, role: UserRole) => {
     if (role === UserRole.STAFF) {
@@ -39,7 +54,7 @@ export default function AdminUsersPage() {
       toast({
         variant: 'destructive',
         title: 'Failed to update role',
-        description: error?.response?.data?.message ?? 'Please try again.',
+        description: getFirebaseErrorMessage(error),
       });
     }
   };
@@ -54,7 +69,7 @@ export default function AdminUsersPage() {
       toast({
         variant: 'destructive',
         title: 'Failed to update role',
-        description: error?.response?.data?.message ?? 'Please try again.',
+        description: getFirebaseErrorMessage(error),
       });
     }
   };
@@ -87,6 +102,9 @@ export default function AdminUsersPage() {
                       <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                     </div>
                     {!u.isActive && <Badge variant="secondary">Suspended</Badge>}
+                    {u.role === UserRole.STAFF && staffMembers.some((member: any) => member.userId === u.id && isOnStaffLeave(leavesByStaff[member.id] ?? [], today)) && (
+                      <Badge variant="destructive" className="h-2 w-2 rounded-full p-0" title="On leave" />
+                    )}
                   </div>
 
                   <div className="w-40 shrink-0">

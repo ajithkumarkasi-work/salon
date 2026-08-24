@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { getFirebaseErrorMessage, loginWithEmail } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth.store';
 import { UserRole } from '@glowbook/shared-types';
 
@@ -13,17 +13,14 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
 
   const login = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post('/auth/login', { email: email.trim().toLowerCase(), password });
-      return data;
-    },
-    onSuccess: (data) => {
-      setAuth(data.user, data.tokens.accessToken, data.tokens.refreshToken);
-      const isBusinessRole = [UserRole.ADMIN, UserRole.SALON_OWNER, UserRole.STAFF].includes(data.user.role);
+    mutationFn: async () => loginWithEmail({ email: email.trim().toLowerCase(), password }),
+    onSuccess: (user) => {
+      setAuth(user, '', '');
+      const isBusinessRole = [UserRole.ADMIN, UserRole.SALON_OWNER, UserRole.STAFF].includes(user.role);
       router.replace(isBusinessRole ? '/(business-tabs)' : '/(tabs)');
     },
     onError: (err: any) => {
-      Alert.alert('Login failed', err?.response?.data?.message ?? 'Please check your credentials.');
+      Alert.alert('Login failed', getFirebaseErrorMessage(err));
     },
   });
 

@@ -3,7 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { api } from '@/shared/lib/api';
+import { where } from 'firebase/firestore';
+import { appointmentsService, enrichAppointments } from '@/shared/lib/firebase';
+import { useAuthStore } from '@/shared/stores/auth.store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -17,25 +19,23 @@ const STATUS_GROUPS = [
 
 export default function CustomerAppointmentsPage() {
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [activeFilter, setActiveFilter] = useState<(typeof STATUS_GROUPS)[number]['key']>('upcoming');
   const { data, isLoading } = useQuery({
-    queryKey: ['customer-appointments-web'],
+    queryKey: ['customer-appointments-web', user?.id],
     queryFn: async () => {
-      const groups = await Promise.all(
-        STATUS_GROUPS.map(async (group) => {
-          const rows = await Promise.all(
-            group.statuses.map((status) =>
-              api.get('/appointments', { params: { status, limit: 50 } }).then((r) => r.data?.data ?? []),
-            ),
-          );
-          const merged = rows.flat().sort((a: any, b: any) =>
-            new Date(b.startTime).getTime() - new Date(a.startTime).getTime(),
-          );
-          return { key: group.key, label: group.label, data: merged };
-        }),
+      const all = await enrichAppointments(
+        await appointmentsService.list(where('customerId', '==', user!.id)),
       );
-      return groups;
+      return STATUS_GROUPS.map((group) => ({
+        key: group.key,
+        label: group.label,
+        data: all
+          .filter((appt) => (group.statuses as readonly string[]).includes(appt.status))
+          .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime()),
+      }));
     },
+    enabled: !!user,
   });
 
   const activeGroup = useMemo(

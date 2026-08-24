@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { api } from '@/shared/lib/api';
+import { where } from 'firebase/firestore';
+import { appointmentsService, reviewsService, salonsService, servicesService } from '@/shared/lib/firebase';
+import { useAuthStore } from '@/shared/stores/auth.store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
@@ -45,25 +47,60 @@ function renderStaticStars(value: number) {
 
 export default function CustomerReviewsPage() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
   const [drafts, setDrafts] = useState<Record<string, { rating: number; comment: string }>>({});
 
   const { data, isLoading } = useQuery({
-    queryKey: ['customer-reviews-appointments'],
+    queryKey: ['customer-reviews-appointments', user?.id],
     queryFn: async () => {
-      const { data } = await api.get('/appointments', { params: { status: 'COMPLETED', limit: 50 } });
-      return data?.data ?? [];
+      const appointments = await appointmentsService.list(
+        where('customerId', '==', user!.id),
+        where('status', '==', 'COMPLETED'),
+      );
+      const reviews = await reviewsService.list(where('customerId', '==', user!.id));
+      const reviewByAppointment = new Map(reviews.map((r) => [r.appointmentId, r]));
+
+      const salonIds = Array.from(new Set(appointments.map((a) => a.salonId)));
+      const serviceIds = Array.from(new Set(appointments.map((a) => a.serviceId)));
+      const [salons, services] = await Promise.all([
+        Promise.all(salonIds.map((id) => salonsService.getById(id))),
+        Promise.all(serviceIds.map((id) => servicesService.getById(id))),
+      ]);
+      const salonById = new Map(salonIds.map((id, i) => [id, salons[i]]));
+      const serviceById = new Map(serviceIds.map((id, i) => [id, services[i]]));
+
+      return appointments.map((appt) => ({
+        ...appt,
+        review: reviewByAppointment.get(appt.id),
+        salon: salonById.get(appt.salonId),
+        service: serviceById.get(appt.serviceId),
+      }));
     },
+    enabled: !!user,
   });
 
   const submit = useMutation({
-    mutationFn: async ({ appointmentId, rating, comment }: { appointmentId: string; rating: number; comment: string }) => {
-      await api.post(`/appointments/${appointmentId}/review`, {
+    mutationFn: async ({
+      appointment,
+      rating,
+      comment,
+    }: {
+      appointment: any;
+      rating: number;
+      comment: string;
+    }) => {
+      await reviewsService.create({
+        appointmentId: appointment.id,
+        salonId: appointment.salonId,
+        staffId: appointment.staffId,
+        customerId: user!.id,
         rating,
-        comment: comment.trim() || undefined,
-      });
+        comment: comment.trim() || null,
+        isPublished: true,
+      } as any);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['customer-reviews-appointments'] });
+      qc.invalidateQueries({ queryKey: ['customer-reviews-appointments', user?.id] });
     },
   });
 
@@ -116,7 +153,7 @@ export default function CustomerReviewsPage() {
                       <Button
                         onClick={() =>
                           submit.mutate({
-                            appointmentId: appt.id,
+                            appointment: appt,
                             rating: Math.max(1, Math.min(5, Number(draft.rating) || 5)),
                             comment: draft.comment,
                           })

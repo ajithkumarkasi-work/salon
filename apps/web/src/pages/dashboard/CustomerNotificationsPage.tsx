@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, BellRing } from 'lucide-react';
-import { api } from '@/shared/lib/api';
+import { listNotificationsByUser, markAllNotificationsRead } from '@/shared/lib/firebase';
+import { useAuthStore } from '@/shared/stores/auth.store';
 import { Card, CardContent } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
@@ -12,14 +13,16 @@ type NotificationFilter = 'all' | 'unread';
 export default function CustomerNotificationsPage() {
   const [filter, setFilter] = useState<NotificationFilter>('all');
   const qc = useQueryClient();
+  const { user } = useAuthStore();
   const { data, isLoading } = useQuery({
-    queryKey: ['customer-notifications'],
-    queryFn: async () => (await api.get('/notifications', { params: { limit: 50 } })).data?.data ?? [],
+    queryKey: ['customer-notifications', user?.id, user?.role],
+    queryFn: () => listNotificationsByUser(user!.id, user!.role),
+    enabled: !!user,
   });
 
   const markAllRead = useMutation({
-    mutationFn: async () => api.patch('/notifications/mark-all-read'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['customer-notifications'] }),
+    mutationFn: async () => markAllNotificationsRead(user!.id, user!.role),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['customer-notifications', user?.id] }),
   });
 
   const notifications = data ?? [];

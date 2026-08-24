@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Heart, MapPin, Trash2 } from 'lucide-react';
-import { api } from '@/shared/lib/api';
+import { listFavoritesByUser, removeFavorite, salonsService } from '@/shared/lib/firebase';
+import { useAuthStore } from '@/shared/stores/auth.store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
@@ -10,23 +11,29 @@ import { ContentLoader } from '@/shared/components/PageLoader';
 export default function CustomerFavoritesPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user } = useAuthStore();
 
   const { data, isLoading } = useQuery({
-    queryKey: ['customer-favorites'],
+    queryKey: ['customer-favorites', user?.id],
     queryFn: async () => {
-      const { data } = await api.get('/favorites');
-      return data ?? [];
+      const favs = await listFavoritesByUser(user!.id);
+      const withSalons = await Promise.all(
+        favs.map(async (fav) => ({ ...fav, salon: await salonsService.getById(fav.salonId) })),
+      );
+      return withSalons;
     },
+    enabled: !!user,
   });
 
-  const removeFavorite = useMutation({
-    mutationFn: async (salonId: string) => api.delete(`/favorites/${salonId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['customer-favorites'] }),
+  const removeFavoriteMutation = useMutation({
+    mutationFn: async (salonId: string) => removeFavorite(user!.id, salonId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['customer-favorites', user?.id] }),
   });
 
   const favorites = data ?? [];
 
   const getSalonImage = (salon: any) => salon?.images?.[0]?.url || salon?.images?.[0]?.imageUrl || null;
+
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -112,8 +119,8 @@ export default function CustomerFavoritesPage() {
                       <Button
                         className="w-full border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800"
                         variant="outline"
-                        onClick={() => salonId && removeFavorite.mutate(salonId)}
-                        disabled={!salonId || removeFavorite.isPending}
+                        onClick={() => salonId && removeFavoriteMutation.mutate(salonId)}
+                        disabled={!salonId || removeFavoriteMutation.isPending}
                       >
                         <Trash2 className="h-4 w-4" />
                         Remove from Favorites

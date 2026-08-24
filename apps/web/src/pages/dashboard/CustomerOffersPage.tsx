@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Check, Copy, Percent, Sparkles, Tag } from 'lucide-react';
-import { api } from '@/shared/lib/api';
+import { listActiveSalons, listCouponsBySalon } from '@/shared/lib/firebase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { CustomSelect } from '@/shared/components/ui/custom-select';
 import { Skeleton } from '@/shared/components/Skeleton';
 import { useToast } from '@/shared/hooks/use-toast';
+import { formatCurrency, formatDate } from '@/shared/lib/utils';
 
 export default function CustomerOffersPage() {
   const [salonId, setSalonId] = useState('');
@@ -16,12 +17,12 @@ export default function CustomerOffersPage() {
 
   const { data: salons, isLoading: isLoadingSalons } = useQuery({
     queryKey: ['offers-salons'],
-    queryFn: async () => (await api.get('/salons', { params: { limit: 20 } })).data?.data ?? [],
+    queryFn: () => listActiveSalons(),
   });
 
   const { data: coupons, isLoading: isLoadingCoupons } = useQuery({
     queryKey: ['offers-coupons', salonId],
-    queryFn: async () => (await api.get(`/coupons/salon/${salonId}`)).data ?? [],
+    queryFn: () => listCouponsBySalon(salonId),
     enabled: !!salonId,
   });
 
@@ -101,23 +102,33 @@ export default function CustomerOffersPage() {
         <div className="grid grid-cols-1 gap-2.5 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
           {(coupons ?? []).map((coupon: any) => {
             const isPercent = coupon.type === 'PERCENTAGE';
-            const amountLabel = isPercent ? `${coupon.value}% OFF` : `₹${coupon.value} OFF`;
             const isCopied = copiedCode === coupon.code;
 
             return (
-              <Card key={coupon.id} className="h-full overflow-hidden border-border/70">
-                <CardHeader className="pb-2 px-3 pt-3 sm:px-6 sm:pt-6">
+              <Card key={coupon.id} className="h-full overflow-hidden border-primary/20 shadow-sm transition-shadow hover:shadow-md">
+                <CardHeader className="border-b border-dashed px-3 pb-3 pt-3 sm:px-6 sm:pb-4 sm:pt-5">
                   <div className="flex items-center justify-between gap-2 sm:items-start">
-                    <CardTitle className="min-w-0 truncate text-sm tracking-wide sm:text-base">{coupon.code}</CardTitle>
-                    <Badge variant="outline" className="h-6 px-2 text-[10px] sm:h-auto sm:px-2.5 sm:text-xs">Active</Badge>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <Tag className="h-4 w-4" />
+                      </div>
+                      <CardTitle className="min-w-0 truncate text-sm tracking-wide sm:text-base">{coupon.code}</CardTitle>
+                    </div>
+                    <Badge variant="success" className="h-6 px-2 text-[10px] sm:text-xs">Active</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="flex h-full flex-col space-y-2.5 px-3 pb-3 sm:space-y-3 sm:px-6 sm:pb-6">
-                  <div className="rounded-md bg-primary/10 p-2 text-primary sm:p-3">
-                    <p className="flex items-center gap-1.5 text-xs font-medium sm:text-sm">
-                      {isPercent ? <Percent className="h-4 w-4 shrink-0" /> : <Tag className="h-4 w-4 shrink-0" />}
-                      <span className="truncate">{amountLabel}</span>
-                    </p>
+                  <div className="rounded-md bg-primary/[0.06] p-3 text-primary sm:p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-primary/70">Special offer</p>
+                    <p className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{isPercent ? `${coupon.value}%` : formatCurrency(Number(coupon.value))}</p>
+                    <p className="mt-0.5 text-xs font-medium text-muted-foreground">discount on your booking</p>
+                  </div>
+
+                  <div className="min-h-[52px] space-y-1 text-xs text-muted-foreground">
+                    {Number(coupon.minAmount) > 0 && <p>Minimum booking: {formatCurrency(Number(coupon.minAmount))}</p>}
+                    {coupon.maxDiscount != null && <p>Maximum saving: {formatCurrency(Number(coupon.maxDiscount))}</p>}
+                    {coupon.newCustomersOnly && <p className="font-medium text-blue-600">For new customers only</p>}
+                    <p>Valid until {formatDate(coupon.validUntil)}</p>
                   </div>
 
                   <Button

@@ -38,11 +38,7 @@ export default function ServicesPage() {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const canManageServices = user?.role === UserRole.SALON_OWNER || user?.role === UserRole.ADMIN;
   const myStaffProfile = (staff ?? []).find((member: any) => member.user?.id === user?.id);
-  const assignedServiceIds = new Set(
-    (myStaffProfile?.services ?? [])
-      .map((item: any) => item?.service?.id ?? item?.serviceId ?? item?.id)
-      .filter(Boolean),
-  );
+  const assignedServiceIds = new Set<string>((myStaffProfile as any)?.serviceIds ?? []);
   const visibleServices = user?.role === UserRole.STAFF
     ? (services ?? []).filter((service: Service) => assignedServiceIds.has(service.id))
     : (services ?? []);
@@ -350,6 +346,16 @@ export default function ServicesPage() {
             </div>
           ))}
         </div>
+      ) : !visibleServices.length ? (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground bg-card border rounded-xl">
+          <Tag className="h-10 w-10 mb-3 opacity-40" />
+          <p className="font-medium">No services to show</p>
+          <p className="text-sm mt-1">
+            {user?.role === UserRole.STAFF
+              ? 'No services are assigned to this staff member yet.'
+              : 'No services have been created for this salon yet.'}
+          </p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {visibleServices.map((service: Service) => (
@@ -410,19 +416,6 @@ export default function ServicesPage() {
               </CardContent>
             </Card>
           ))}
-
-          {!visibleServices.length && (
-            <Card>
-              <CardContent className="p-5">
-                <p className="font-medium">No services to show</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {user?.role === UserRole.STAFF
-                    ? 'No services are assigned to this staff member yet.'
-                    : 'No services have been created for this salon yet.'}
-                </p>
-              </CardContent>
-            </Card>
-          )}
         </div>
       )}
     </div>

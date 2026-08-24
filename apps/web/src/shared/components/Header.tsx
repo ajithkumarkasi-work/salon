@@ -4,22 +4,20 @@ import { Button } from './ui/button';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { getInitials } from '@/shared/lib/utils';
-import { api } from '@/shared/lib/api';
+import { listNotificationsByUser, logout as firebaseLogout } from '@/shared/lib/firebase';
 import { useNavigate } from 'react-router-dom';
 import { UserRole } from '@glowbook/shared-types';
 import { useState } from 'react';
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
-  const { user, refreshToken, logout } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
 
   const { data: notifications = [] } = useQuery({
-    queryKey: ['customer-notifications'],
-    queryFn: async () => {
-      return (await api.get('/notifications', { params: { limit: 50 } })).data?.data ?? [];
-    },
-    enabled: user?.role === UserRole.CUSTOMER,
+    queryKey: ['customer-notifications', user?.id, user?.role],
+    queryFn: () => listNotificationsByUser(user!.id, user!.role),
+    enabled: !!user,
   });
 
   const unreadCount = notifications.filter((n: any) => !n.isRead).length;
@@ -27,7 +25,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const handleLogout = async () => {
     setIsLogoutConfirmOpen(false);
     try {
-      await api.post('/auth/logout', { refreshToken });
+      await firebaseLogout();
     } catch {
       // logout regardless
     } finally {
@@ -63,7 +61,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           onClick={() => navigate('/dashboard/notifications')}
         >
           <Bell className="h-4 w-4" />
-          {user?.role === UserRole.CUSTOMER && unreadCount > 0 && (
+          {user && unreadCount > 0 && (
             <span className="absolute -right-0.5 -top-0.5 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold leading-none text-primary-foreground">
               {unreadCount > 9 ? '9+' : unreadCount}
             </span>

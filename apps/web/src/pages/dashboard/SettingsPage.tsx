@@ -10,13 +10,13 @@ import { useAuthStore } from '@/shared/stores/auth.store';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
 import { getInitials } from '@/shared/lib/utils';
 import { useToast } from '@/shared/hooks/use-toast';
-import { api } from '@/shared/lib/api';
+import { changePassword, getFirebaseErrorMessage, updateUserProfile } from '@/shared/lib/firebase';
 import { ChangePasswordDto, ChangePasswordSchema, UpdateProfileDto, UpdateProfileSchema } from '@glowbook/validation';
 import { Upload, Trash2 } from 'lucide-react';
 
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { user, accessToken, refreshToken, setAuth } = useAuthStore();
+  const { user, setAuth } = useAuthStore();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -62,14 +62,9 @@ export default function SettingsPage() {
   }, [reset, user]);
 
   const updateProfile = useMutation({
-    mutationFn: async (dto: UpdateProfileDto) => {
-      const { data } = await api.patch('/users/me', dto);
-      return data;
-    },
+    mutationFn: async (dto: UpdateProfileDto) => updateUserProfile(user!.id, dto as any),
     onSuccess: (updatedUser) => {
-      if (user && accessToken && refreshToken) {
-        setAuth({ ...user, ...updatedUser }, accessToken, refreshToken);
-      }
+      setAuth(updatedUser, '', '');
       toast({ title: 'Settings saved', description: 'Your profile has been updated.', variant: 'success' as any });
       reset(
         {
@@ -85,16 +80,13 @@ export default function SettingsPage() {
       toast({
         variant: 'destructive',
         title: 'Save failed',
-        description: error?.response?.data?.message ?? 'Unable to save your profile right now.',
+        description: getFirebaseErrorMessage(error),
       });
     },
   });
 
-  const changePassword = useMutation({
-    mutationFn: async (dto: ChangePasswordDto) => {
-      const { data } = await api.post('/auth/change-password', dto);
-      return data;
-    },
+  const changePasswordMutation = useMutation({
+    mutationFn: async (dto: ChangePasswordDto) => changePassword(dto.currentPassword, dto.newPassword),
     onSuccess: () => {
       toast({ title: 'Password changed', description: 'Your password was updated successfully.', variant: 'success' as any });
       resetPassword();
@@ -104,7 +96,7 @@ export default function SettingsPage() {
       toast({
         variant: 'destructive',
         title: 'Password change failed',
-        description: error?.response?.data?.message ?? 'Unable to change password right now.',
+        description: getFirebaseErrorMessage(error),
       });
     },
   });
@@ -149,7 +141,7 @@ export default function SettingsPage() {
   });
 
   const onSubmitPassword = handleSubmitPassword(async (values) => {
-    await changePassword.mutateAsync(values);
+    await changePasswordMutation.mutateAsync(values);
   });
 
   const openPasswordModal = () => {
@@ -158,7 +150,7 @@ export default function SettingsPage() {
   };
 
   const closePasswordModal = () => {
-    if (changePassword.isPending) return;
+    if (changePasswordMutation.isPending) return;
     setIsPasswordModalOpen(false);
     resetPassword({ currentPassword: '', newPassword: '', confirmPassword: '' });
   };
@@ -274,7 +266,7 @@ export default function SettingsPage() {
           <div className="w-full max-w-md rounded-lg border bg-background shadow-lg">
             <div className="flex items-center justify-between border-b px-5 py-4">
               <h2 className="text-base font-semibold">Change Password</h2>
-              <Button type="button" variant="ghost" size="sm" onClick={closePasswordModal} disabled={changePassword.isPending}>
+              <Button type="button" variant="ghost" size="sm" onClick={closePasswordModal} disabled={changePasswordMutation.isPending}>
                 Close
               </Button>
             </div>
@@ -296,10 +288,10 @@ export default function SettingsPage() {
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-1">
-                <Button type="button" variant="outline" onClick={closePasswordModal} disabled={changePassword.isPending}>
+                <Button type="button" variant="outline" onClick={closePasswordModal} disabled={changePasswordMutation.isPending}>
                   Cancel
                 </Button>
-                <Button type="submit" loading={changePassword.isPending}>Update password</Button>
+                <Button type="submit" loading={changePasswordMutation.isPending}>Update password</Button>
               </div>
             </form>
           </div>

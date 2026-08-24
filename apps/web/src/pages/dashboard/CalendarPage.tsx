@@ -1,16 +1,19 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, startOfWeek, addDays, isSameDay, addWeeks, subWeeks } from 'date-fns';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Badge } from '@/shared/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/shared/components/ui/avatar';
 import { useCalendar } from '@/features/appointments/hooks';
+import { useStaff } from '@/features/staff/hooks';
 import { useSalonStore } from '@/shared/stores/salon.store';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { getStatusColor, getInitials, formatCurrency } from '@/shared/lib/utils';
 import { cn } from '@/shared/lib/utils';
 import { Skeleton } from '@/shared/components/Skeleton';
 import { UserRole } from '@glowbook/shared-types';
+import { isOnStaffLeave, listStaffLeaves, staffLeavesService } from '@/shared/lib/firebase';
 
 type ViewMode = 'day' | 'week';
 type LayoutMode = 'grid' | 'vertical';
@@ -23,6 +26,12 @@ export default function CalendarPage() {
   const [selectedAppointment, setSelectedAppointment] = useState<any | null>(null);
   const { activeSalonId } = useSalonStore();
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
+  const { data: salonStaff = [] } = useStaff(activeSalonId ?? '');
+  const [leaveStartDate, setLeaveStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [leaveEndDate, setLeaveEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [leaveReason, setLeaveReason] = useState('');
+  const [isSubmittingLeave, setIsSubmittingLeave] = useState(false);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 767px)');
@@ -54,6 +63,15 @@ export default function CalendarPage() {
     endDate,
   );
 
+  const { data: leavesByStaff = {} } = useQuery({
+    queryKey: ['calendar-staff-leaves', activeSalonId],
+    queryFn: async () => {
+      const entries = await Promise.all(salonStaff.map(async (member: any) => [member.id, await listStaffLeaves(member.id)] as const));
+      return Object.fromEntries(entries);
+    },
+    enabled: !!activeSalonId && !!salonStaff.length,
+  });
+
   const visibleAppointments = useMemo(() => {
     const rows = appointments ?? [];
     if (user?.role !== UserRole.STAFF) return rows;
@@ -61,15 +79,25 @@ export default function CalendarPage() {
   }, [appointments, user?.id, user?.role]);
 
   const staffList = useMemo(() => {
-    if (!visibleAppointments.length) return [];
     const staffMap = new Map<string, any>();
+    salonStaff.forEach((member: any) => {
+      if (user?.role !== UserRole.STAFF || member.userId === user.id) staffMap.set(member.id, member);
+    });
     visibleAppointments.forEach((appt: any) => {
       if (appt.staff && !staffMap.has(appt.staff.id)) {
         staffMap.set(appt.staff.id, appt.staff);
       }
     });
     return Array.from(staffMap.values());
-  }, [visibleAppointments]);
+  }, [salonStaff, user?.id, user?.role, visibleAppointments]);
+
+  const visibleLeaves = useMemo(() => {
+    return staffList.flatMap((member: any) =>
+      (leavesByStaff[member.id] ?? [])
+        .filter((leave: any) => leave.isApproved && (!user || user.role !== UserRole.STAFF || member.userId === user.id))
+        .map((leave: any) => ({ ...leave, staff: member })),
+    );
+  }, [leavesByStaff, staffList, user]);
 
   const navigate = (direction: 'prev' | 'next') => {
     if (viewMode === 'week') {
@@ -154,6 +182,46 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {user?.role === UserRole.STAFF && (
+        <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <p className="font-semibold">Add leave</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+            <input className="h-10 rounded-md border bg-background px-3 text-sm" type="date" value={leaveStartDate} onChange={(event) => setLeaveStartDate(event.target.value)} />
+            <input className="h-10 rounded-md border bg-background px-3 text-sm" type="date" value={leaveEndDate} onChange={(event) => setLeaveEndDate(event.target.value)} />
+            <input className="h-10 rounded-md border bg-background px-3 text-sm" value={leaveReason} onChange={(event) => setLeaveReason(event.target.value)} placeholder="Reason (optional)" />
+          </div>
+          <Button
+            type="button"
+            disabled={isSubmittingLeave || leaveEndDate < leaveStartDate || !salonStaff.some((member: any) => member.userId === user.id)}
+            onClick={async () => {
+              const ownStaff = salonStaff.find((member: any) => member.userId === user.id);
+              if (!ownStaff) return;
+              setIsSubmittingLeave(true);
+              try {
+                await staffLeavesService.create({
+                  staffId: ownStaff.id,
+                  userId: user.id,
+                  salonId: activeSalonId!,
+                  startDate: leaveStartDate,
+                  endDate: leaveEndDate,
+                  reason: leaveReason.trim() || null,
+                  isApproved: true,
+                });
+                setLeaveReason('');
+                await queryClient.invalidateQueries({ queryKey: ['calendar-staff-leaves', activeSalonId] });
+              } finally {
+                setIsSubmittingLeave(false);
+              }
+            }}
+          >
+            Add leave
+          </Button>
+        </div>
+      )}
+
       {/* Calendar grid */}
       <div className="bg-card border rounded-xl overflow-hidden">
         {isLoading ? (
@@ -179,10 +247,15 @@ export default function CalendarPage() {
                   <Badge variant="outline">{appointments.length}</Badge>
                 </div>
 
-                {!appointments.length ? (
+                {!appointments.length && !visibleLeaves.some((leave: any) => isOnStaffLeave([leave], format(day, 'yyyy-MM-dd'))) ? (
                   <p className="px-3 py-4 max-[375px]:px-2 max-[375px]:py-3 text-sm max-[375px]:text-xs text-muted-foreground">No appointments for this day.</p>
                 ) : (
                   <div className="divide-y">
+                    {visibleLeaves.filter((leave: any) => isOnStaffLeave([leave], format(day, 'yyyy-MM-dd'))).map((leave: any) => (
+                      <div key={`leave-${leave.id}-${day.toISOString()}`} className="bg-red-100 px-3 py-2 text-sm font-medium text-red-800">
+                        On leave · {leave.staff.user?.firstName} {leave.staff.user?.lastName}
+                      </div>
+                    ))}
                     {appointments.map((appt: any) => (
                       <button
                         key={appt.id}
@@ -289,6 +362,13 @@ export default function CalendarPage() {
                           )}
                         >
                           <div className="space-y-1 h-20 overflow-y-auto overflow-x-hidden">
+                            {visibleLeaves
+                              .filter((leave: any) => leave.staff.id === staff.id && isOnStaffLeave([leave], format(day, 'yyyy-MM-dd')))
+                              .map((leave: any) => (
+                                <div key={`leave-${leave.id}`} className="w-full rounded bg-red-100 p-1.5 text-xs font-medium text-red-800">
+                                  On leave
+                                </div>
+                              ))}
                             {dayAppts.map((appt: any) => (
                               <button
                                 key={appt.id}

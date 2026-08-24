@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { useAuthStore } from '@/shared/stores/auth.store';
+import { useFirebaseAuthSync } from '@/features/auth/hooks';
 import { UserRole } from '@glowbook/shared-types';
 import { DashboardLayout } from '@/shared/layouts/DashboardLayout';
 import { AuthLayout } from '@/shared/layouts/AuthLayout';
@@ -77,6 +78,10 @@ function RoleAwareRoute({
 }
 
 export default function App() {
+  const { isSyncing } = useFirebaseAuthSync();
+
+  if (isSyncing) return <PageLoader />;
+
   return (
     <>
       <Suspense fallback={<PageLoader />}>

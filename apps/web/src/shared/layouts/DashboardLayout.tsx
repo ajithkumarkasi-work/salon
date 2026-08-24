@@ -5,6 +5,7 @@ import { Header } from '@/shared/components/Header';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { useSalonStore } from '@/shared/stores/salon.store';
 import { useMyStaffProfile } from '@/features/staff/hooks';
+import { useOwnerSalons } from '@/features/salons/hooks';
 import { UserRole } from '@glowbook/shared-types';
 
 export function DashboardLayout() {
@@ -12,6 +13,10 @@ export function DashboardLayout() {
   const { user } = useAuthStore();
   const { activeSalonId, setActiveSalon } = useSalonStore();
   const { data: myStaffProfile } = useMyStaffProfile(user?.role === UserRole.STAFF);
+  // Ensures activeSalonId is always populated for owners/admins app-wide
+  // (not just when OverviewPage happens to mount first), so pages like Quick
+  // Booking that depend on it work regardless of which page loads first.
+  useOwnerSalons();
 
   useEffect(() => {
     if (user?.role === UserRole.STAFF && !activeSalonId && myStaffProfile?.salonId) {

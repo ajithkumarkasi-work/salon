@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { Search } from 'lucide-react';
 import { Card, CardContent } from '@/shared/components/ui/card';
@@ -13,6 +14,7 @@ import { useStaff } from '@/features/staff/hooks';
 import { useSalonStore } from '@/shared/stores/salon.store';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { formatCurrency, getStatusColor, getInitials } from '@/shared/lib/utils';
+import { getFirebaseErrorMessage, isOnStaffLeave, listStaffLeaves } from '@/shared/lib/firebase';
 import { Skeleton, TableRowSkeleton } from '@/shared/components/Skeleton';
 import { useToast } from '@/shared/hooks/use-toast';
 import { AppointmentStatus, UserRole } from '@glowbook/shared-types';
@@ -69,13 +71,22 @@ export default function AppointmentsPage() {
   const { data: services } = useServices(activeSalonId ?? '');
   const { data: staff } = useStaff(activeSalonId ?? '');
 
-  const { data, isLoading } = useAppointments({
+  const { data, isLoading, error } = useAppointments({
     salonId: activeSalonId,
     status: statusFilter === 'ALL' ? undefined : statusFilter,
     search: searchTerm.trim() || undefined,
     page,
     limit: 20,
   });
+
+  useEffect(() => {
+    if (!error) return;
+    toast({
+      variant: 'destructive',
+      title: 'Could not load appointments',
+      description: getFirebaseErrorMessage(error),
+    });
+  }, [error, toast]);
 
   const { data: pendingData } = useAppointments({
     salonId: activeSalonId,
@@ -105,10 +116,19 @@ export default function AppointmentsPage() {
   const updateStatus = useUpdateAppointmentStatus();
   const createAppointment = useCreateAppointment();
   const { data: appointmentDetail, isLoading: appointmentDetailLoading } = useAppointment(selectedAppointmentId ?? '');
-  const canAssistBooking = user?.role === UserRole.ADMIN;
+  const canAssistBooking = user?.role === UserRole.ADMIN || user?.role === UserRole.SALON_OWNER;
   const canManageAppointmentStatus = [UserRole.STAFF, UserRole.SALON_OWNER, UserRole.ADMIN].includes(user?.role as UserRole);
   const canOverrideTransitions = user?.role === UserRole.SALON_OWNER || user?.role === UserRole.ADMIN;
-  const canOpenAppointmentDrawer = user?.role === UserRole.ADMIN;
+  const canOpenAppointmentDrawer = user?.role === UserRole.ADMIN || user?.role === UserRole.SALON_OWNER;
+  const bookingDate = startTime ? new Date(startTime).toISOString().slice(0, 10) : '';
+  const { data: bookingLeaves = {} } = useQuery({
+    queryKey: ['appointment-booking-leaves', activeSalonId, bookingDate],
+    queryFn: async () => {
+      const entries = await Promise.all((staff ?? []).map(async (member: any) => [member.id, await listStaffLeaves(member.id)] as const));
+      return Object.fromEntries(entries);
+    },
+    enabled: !!activeSalonId && !!bookingDate && !!staff?.length,
+  });
 
   const actionableCount =
     (pendingData?.meta?.total ?? 0) +
@@ -117,9 +137,14 @@ export default function AppointmentsPage() {
     (inProgressData?.meta?.total ?? 0);
 
   const availableStaff = useMemo(() => {
-    if (!serviceId) return staff ?? [];
-    return (staff ?? []).filter((member: any) => (member.services ?? []).some((s: any) => s.serviceId === serviceId));
-  }, [staff, serviceId]);
+    const available = (staff ?? []).filter((member: any) => !isOnStaffLeave(bookingLeaves[member.id] ?? [], bookingDate));
+    if (!serviceId) return available;
+    // Staff with no services assigned yet (e.g. just promoted via Admin →
+    // Users) are treated as available for any service, rather than hidden.
+    return available.filter(
+      (member: any) => !member.serviceIds?.length || member.serviceIds.includes(serviceId),
+    );
+  }, [bookingDate, bookingLeaves, serviceId, staff]);
 
   const appointmentStatus = (appt: any): AppointmentStatus =>
     optimisticStatuses[appt.id] ?? appt.status;
@@ -130,7 +155,7 @@ export default function AppointmentsPage() {
     updateStatus.mutate(
       { id: appt.id, status: nextStatus },
       {
-        onError: () => {
+        onError: (error) => {
           setOptimisticStatuses((current) => {
             if (current[appt.id] !== nextStatus) return current;
             const { [appt.id]: _, ...remainingStatuses } = current;
@@ -139,7 +164,7 @@ export default function AppointmentsPage() {
           toast({
             variant: 'destructive',
             title: 'Status update failed',
-            description: 'The appointment status was restored. Please try again.',
+            description: getFirebaseErrorMessage(error),
           });
         },
       },
@@ -218,7 +243,7 @@ export default function AppointmentsPage() {
       toast({
         variant: 'destructive',
         title: 'Failed to create appointment',
-        description: error?.response?.data?.message ?? 'Please try again.',
+        description: getFirebaseErrorMessage(error),
       });
     }
   };

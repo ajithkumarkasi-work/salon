@@ -1,7 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Star } from 'lucide-react';
-import { api } from '@/shared/lib/api';
+import {
+  addFavorite,
+  isFavorited,
+  listReviewsBySalon,
+  listServicesBySalon,
+  listStaffBySalon,
+  removeFavorite,
+  salonsService,
+  withCustomerProfiles,
+} from '@/shared/lib/firebase';
+import { useAuthStore } from '@/shared/stores/auth.store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Button } from '@/shared/components/ui/button';
 import { Skeleton } from '@/shared/components/Skeleton';
@@ -29,51 +39,49 @@ export default function CustomerSalonDetailsPage() {
   const { salonId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user } = useAuthStore();
 
   const { data: salon, isLoading, isError, refetch } = useQuery({
     queryKey: ['customer-salon', salonId],
-    queryFn: async () => {
-      const raw = (await api.get(`/salons/${salonId}`)).data;
-      return raw?.data ?? raw;
-    },
+    queryFn: () => salonsService.getById(salonId!),
     enabled: !!salonId,
   });
 
   const { data: services } = useQuery({
     queryKey: ['customer-salon-services', salonId],
-    queryFn: async () => toArray((await api.get(`/salons/${salonId}/services`)).data),
+    queryFn: () => listServicesBySalon(salonId!),
     enabled: !!salonId,
   });
 
   const { data: staff } = useQuery({
     queryKey: ['customer-salon-staff', salonId],
-    queryFn: async () => toArray((await api.get(`/salons/${salonId}/staff`)).data),
+    queryFn: () => listStaffBySalon(salonId!),
     enabled: !!salonId,
   });
 
   const { data: reviews } = useQuery({
     queryKey: ['customer-salon-reviews', salonId],
-    queryFn: async () => toArray((await api.get(`/salons/${salonId}/reviews`, { params: { limit: 5 } })).data),
+    queryFn: async () => withCustomerProfiles(await listReviewsBySalon(salonId!)),
     enabled: !!salonId,
   });
 
   const { data: favoriteStatus } = useQuery({
-    queryKey: ['customer-salon-favorite-check', salonId],
-    queryFn: async () => (await api.get(`/favorites/${salonId}/check`)).data,
-    enabled: !!salonId,
+    queryKey: ['customer-salon-favorite-check', salonId, user?.id],
+    queryFn: async () => ({ isFavorite: await isFavorited(user!.id, salonId!) }),
+    enabled: !!salonId && !!user,
   });
 
   const toggleFavorite = useMutation({
     mutationFn: async () => {
       if (favoriteStatus?.isFavorite) {
-        await api.delete(`/favorites/${salonId}`);
+        await removeFavorite(user!.id, salonId!);
       } else {
-        await api.post(`/favorites/${salonId}`);
+        await addFavorite(user!.id, salonId!);
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['customer-salon-favorite-check', salonId] });
-      qc.invalidateQueries({ queryKey: ['customer-favorites'] });
+      qc.invalidateQueries({ queryKey: ['customer-salon-favorite-check', salonId, user?.id] });
+      qc.invalidateQueries({ queryKey: ['customer-favorites', user?.id] });
     },
   });
 

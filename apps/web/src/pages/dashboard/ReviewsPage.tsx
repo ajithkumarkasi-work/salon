@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/shared/lib/api';
+import { listReviewsBySalon, withCustomerProfiles } from '@/shared/lib/firebase';
 import { useSalonStore } from '@/shared/stores/salon.store';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { useStaff } from '@/features/staff/hooks';
@@ -18,10 +18,7 @@ export default function ReviewsPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['reviews', activeSalonId],
-    queryFn: async () => {
-      const { data } = await api.get(`/salons/${activeSalonId}/reviews`);
-      return data;
-    },
+    queryFn: async () => withCustomerProfiles(await listReviewsBySalon(activeSalonId!)),
     enabled: !!activeSalonId,
   });
 
@@ -31,7 +28,7 @@ export default function ReviewsPage() {
   );
 
   const visibleReviews = useMemo(() => {
-    const allReviews = data?.data ?? [];
+    const allReviews = data ?? [];
     if (user?.role === UserRole.STAFF) {
       return allReviews.filter((review: any) => {
         const reviewStaffId = review.staff?.id ?? review.staffId;
@@ -39,7 +36,7 @@ export default function ReviewsPage() {
       });
     }
     return allReviews;
-  }, [data?.data, myStaffProfile?.id, user?.role]);
+  }, [data, myStaffProfile?.id, user?.role]);
 
   const averageRating = useMemo(() => {
     if (!visibleReviews.length) return 0;
@@ -113,14 +110,13 @@ export default function ReviewsPage() {
             ))
           : !visibleReviews.length
           ? (
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <p className="font-medium">No reviews found</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Customer ratings and messages will appear here after completed appointments are reviewed.
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground bg-card border rounded-xl text-center">
+                <MessageSquareText className="h-10 w-10 mb-3 opacity-40" />
+                <p className="font-medium">No reviews found</p>
+                <p className="text-sm mt-1">
+                  Customer ratings and messages will appear here after completed appointments are reviewed.
+                </p>
+              </div>
             )
           : visibleReviews.map((review: any) => (
               <Card key={review.id}>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { TrendingUp, TrendingDown, Users, CalendarCheck, DollarSign, Star, Clock, AlertCircle } from 'lucide-react';
+import { Users, CalendarCheck, DollarSign, Star, Clock, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
@@ -12,6 +12,7 @@ import { useOwnerSalons, useCreateSalon, useSalonCategories } from '@/features/s
 import { Input } from '@/shared/components/ui/input';
 import { CustomSelect } from '@/shared/components/ui/custom-select';
 import { useToast } from '@/shared/hooks/use-toast';
+import { getFirebaseErrorMessage } from '@/shared/lib/firebase';
 import { formatCurrency, formatTime, getStatusColor, getInitials } from '@/shared/lib/utils';
 import { Skeleton, StatCardSkeleton } from '@/shared/components/Skeleton';
 import { UserRole } from '@glowbook/shared-types';
@@ -90,8 +91,6 @@ export default function OverviewPage() {
           label: 'Total Revenue',
           value: formatCurrency(summary?.totalRevenue ?? 0),
           icon: DollarSign,
-          trend: '+12.5%',
-          up: true,
           color: 'text-green-600',
           bg: 'bg-green-50',
         }]
@@ -100,8 +99,6 @@ export default function OverviewPage() {
       label: 'Total Bookings',
       value: summary?.totalBookings ?? 0,
       icon: CalendarCheck,
-      trend: '+8.2%',
-      up: true,
       color: 'text-blue-600',
       bg: 'bg-blue-50',
     },
@@ -109,8 +106,6 @@ export default function OverviewPage() {
       label: 'New Customers',
       value: summary?.newCustomers ?? 0,
       icon: Users,
-      trend: '+5.1%',
-      up: true,
       color: 'text-purple-600',
       bg: 'bg-purple-50',
     },
@@ -118,8 +113,6 @@ export default function OverviewPage() {
       label: 'Avg Rating',
       value: summary?.averageRating ? summary.averageRating.toFixed(1) : '—',
       icon: Star,
-      trend: '+0.2',
-      up: true,
       color: 'text-amber-600',
       bg: 'bg-amber-50',
     },
@@ -174,7 +167,7 @@ export default function OverviewPage() {
   }, [recentAppointments?.data]);
 
   if (salonsLoading) return <div className="grid grid-cols-4 gap-4">{Array(4).fill(0).map((_, i) => <StatCardSkeleton key={i} />)}</div>;
-  if (!activeSalonId) return <EmptyState />;
+  if (!activeSalonId) return <EmptyState canCreate={isOwner} />;
 
   const hasSevenDayTrendData = sevenDayBookingsTrend.some((point) => point.count > 0);
 
@@ -217,16 +210,6 @@ export default function OverviewPage() {
                     </div>
                   </div>
                   <div className="text-2xl font-bold">{stat.value}</div>
-                  <div className="flex items-center gap-1 mt-1">
-                    {stat.up ? (
-                      <TrendingUp className="h-3.5 w-3.5 text-green-500" />
-                    ) : (
-                      <TrendingDown className="h-3.5 w-3.5 text-red-500" />
-                    )}
-                    <span className={`text-xs ${stat.up ? 'text-green-600' : 'text-red-600'}`}>
-                      {stat.trend} vs last period
-                    </span>
-                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -428,16 +411,24 @@ export default function OverviewPage() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ canCreate }: { canCreate: boolean }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
       <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
       <h2 className="text-xl font-semibold mb-2">No salon found</h2>
-      <p className="text-muted-foreground mb-6">Create a salon or select one to load overview data.</p>
-      <Button onClick={() => setIsModalOpen(true)}>Create your first salon</Button>
-      {isModalOpen && <CreateSalonModal onClose={() => setIsModalOpen(false)} />}
+      {canCreate ? (
+        <>
+          <p className="text-muted-foreground mb-6">Create a salon or select one to load overview data.</p>
+          <Button onClick={() => setIsModalOpen(true)}>Create your first salon</Button>
+          {isModalOpen && <CreateSalonModal onClose={() => setIsModalOpen(false)} />}
+        </>
+      ) : (
+        <p className="text-muted-foreground">
+          No salons exist yet. Only salon owners can create a salon — ask a salon owner to set one up.
+        </p>
+      )}
     </div>
   );
 }
@@ -485,7 +476,7 @@ function CreateSalonModal({ onClose }: { onClose: () => void }) {
       toast({
         variant: 'destructive',
         title: 'Failed to create salon',
-        description: error?.response?.data?.message ?? 'Please try again.',
+        description: getFirebaseErrorMessage(error),
       });
     }
   };

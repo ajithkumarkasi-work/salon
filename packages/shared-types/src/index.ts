@@ -37,6 +37,8 @@ export enum NotificationType {
   NEW_BOOKING = 'NEW_BOOKING',
   CUSTOMER_ARRIVED = 'CUSTOMER_ARRIVED',
   STAFF_SCHEDULE_CHANGED = 'STAFF_SCHEDULE_CHANGED',
+  PROFILE_UPDATED = 'PROFILE_UPDATED',
+  APPOINTMENT_STATUS_UPDATED = 'APPOINTMENT_STATUS_UPDATED',
 }
 
 export enum DayOfWeek {
@@ -160,6 +162,8 @@ export interface Staff extends BaseEntity {
 
 export interface StaffLeave extends BaseEntity {
   staffId: string;
+  userId: string;
+  salonId: string;
   startDate: string;
   endDate: string;
   reason: string | null;
@@ -228,6 +232,8 @@ export interface Appointment extends BaseEntity {
   cancelledAt: string | null;
   cancellationReason: string | null;
   qrCode: string;
+  bookingSource?: string;
+  bookingReason?: string | null;
   salon?: Pick<Salon, 'id' | 'name' | 'address' | 'phone' | 'coverImageUrl'>;
   customer?: Pick<User, 'id' | 'firstName' | 'lastName' | 'email' | 'phone' | 'avatarUrl'>;
   staff?: Pick<Staff, 'id' | 'role' | 'avatarUrl'> & { user: Pick<User, 'firstName' | 'lastName'> };

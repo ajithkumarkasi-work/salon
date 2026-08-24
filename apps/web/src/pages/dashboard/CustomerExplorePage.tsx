@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
-import { api } from '@/shared/lib/api';
+import { listActiveSalons } from '@/shared/lib/firebase';
 import { Input } from '@/shared/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card';
 import { ContentLoader } from '@/shared/components/PageLoader';
@@ -24,14 +24,18 @@ export default function CustomerExplorePage() {
   const [search, setSearch] = useState('');
 
   const { data, isLoading } = useQuery({
-    queryKey: ['customer-explore', search],
-    queryFn: async () => {
-      const { data } = await api.get('/salons', { params: { search: search || undefined, limit: 24 } });
-      return data?.data ?? [];
-    },
+    queryKey: ['customer-explore'],
+    queryFn: () => listActiveSalons(),
   });
 
-  const salons = useMemo(() => data ?? [], [data]);
+  const salons = useMemo(() => {
+    const all = data ?? [];
+    const term = search.trim().toLowerCase();
+    if (!term) return all;
+    return all.filter(
+      (salon) => salon.name.toLowerCase().includes(term) || salon.city.toLowerCase().includes(term),
+    );
+  }, [data, search]);
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 animate-fade-in">

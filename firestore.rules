@@ -1,0 +1,158 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function myRole() {
+      return isSignedIn() ? myProfile().role : null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && myRole() == 'ADMIN';
+    }
+
+    function ownsSalon(salonId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/salons/$(salonId)).data.ownerId == request.auth.uid;
+    }
+
+    // ─── Users ────────────────────────────────────────────────────────────────
+    match /users/{userId} {
+      // Any signed-in user can read basic profiles (needed to show customer/
+      // staff names on appointments, reviews, etc. to other signed-in users).
+      allow read: if isSignedIn();
+      // Registration: a signed-in user may only create their own profile as
+      // CUSTOMER/SALON_OWNER. Salon owners/admins may additionally create a
+      // STAFF profile for someone else (staff account creation flow), and
+      // salon owners/staff/admins may create a walk-in CUSTOMER profile for
+      // assisted "quick booking" (customer has no account yet).
+      allow create: if isAdmin() ||
+        (isSelf(userId) && (request.resource.data.role == 'CUSTOMER' || request.resource.data.role == 'SALON_OWNER')) ||
+        (myRole() == 'SALON_OWNER' && request.resource.data.role == 'STAFF') ||
+        ((myRole() == 'SALON_OWNER' || myRole() == 'STAFF') && request.resource.data.role == 'CUSTOMER');
+      allow update: if isSelf(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ─── Salon catalog (public read) ────────────────────────────────────────
+    match /salonCategories/{id} {
+      allow read: if true;
+      // Any signed-in user may seed the default category list (idempotent,
+      // fixed slugs); only admins can edit or remove categories afterwards.
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /serviceCategories/{id} {
+      allow read: if true;
+      allow write: if isAdmin() || ownsSalon(resource.data.salonId) || ownsSalon(request.resource.data.salonId);
+    }
+
+    match /salons/{salonId} {
+      allow read: if true;
+      // Only SALON_OWNER accounts may create salons (admins manage/oversee,
+      // they don't own salons themselves).
+      allow create: if myRole() == 'SALON_OWNER' && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if ownsSalon(salonId) || isAdmin();
+    }
+
+    match /services/{id} {
+      allow read: if true;
+      allow write: if isAdmin() || ownsSalon(resource.data.salonId) || ownsSalon(request.resource.data.salonId);
+    }
+
+    match /staff/{id} {
+      allow read: if true;
+      allow write: if isAdmin() || ownsSalon(resource.data.salonId) || ownsSalon(request.resource.data.salonId);
+    }
+
+    match /staffLeaves/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        (request.resource.data.userId == request.auth.uid ||
+         ownsSalon(request.resource.data.salonId) ||
+         isAdmin());
+      allow update, delete: if isSignedIn() &&
+        (resource.data.userId == request.auth.uid ||
+         ownsSalon(resource.data.salonId) ||
+         isAdmin());
+    }
+
+    match /appointmentStatusHistory/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /workingHours/{id} {
+      allow read: if true;
+      allow write: if isAdmin() ||
+        (resource != null && ownsSalon(resource.data.salonId)) ||
+        (request.resource != null && ownsSalon(request.resource.data.salonId));
+    }
+
+    match /coupons/{id} {
+      allow read: if true;
+      allow write: if isAdmin() || ownsSalon(resource.data.salonId) || ownsSalon(request.resource.data.salonId);
+    }
+
+    // ─── Reviews (public read, customer-authored) ───────────────────────────
+    match /reviews/{id} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.customerId == request.auth.uid;
+      allow update, delete: if isSignedIn() &&
+        (resource.data.customerId == request.auth.uid || isAdmin() || ownsSalon(resource.data.salonId));
+    }
+
+    // ─── Personal data ───────────────────────────────────────────────────────
+    match /favorites/{id} {
+      allow read, write: if isSignedIn() &&
+        (resource == null ? request.resource.data.userId == request.auth.uid : resource.data.userId == request.auth.uid);
+    }
+
+    match /notifications/{id} {
+      allow read, update, delete: if isSignedIn() &&
+        (resource.data.userId == request.auth.uid || myRole() == 'SALON_OWNER' || isAdmin());
+      allow create: if isSignedIn();
+    }
+
+    match /appointments/{id} {
+      // Note: staffId references a Staff *document* id, not the staff
+      // member's auth uid, so it can't be matched directly here — staff
+      // access is granted via role instead (not scoped to their own salon
+      // only, since rules can't query "is this uid staff of this salon"
+      // without a deterministic doc id).
+      allow read: if isSignedIn() &&
+        (resource.data.customerId == request.auth.uid ||
+         ownsSalon(resource.data.salonId) ||
+         myRole() == 'STAFF' ||
+         isAdmin());
+      // Self-booking: customerId must be the caller. Assisted "quick booking"
+      // by staff/owner/admin: customerId is the walk-in customer, but the
+      // caller must be staff/owner of that salon (or an admin).
+      allow create: if isSignedIn() &&
+        (request.resource.data.customerId == request.auth.uid ||
+         ownsSalon(request.resource.data.salonId) ||
+         myRole() == 'STAFF' ||
+         isAdmin());
+      allow update: if isSignedIn() &&
+        (resource.data.customerId == request.auth.uid ||
+         ownsSalon(resource.data.salonId) ||
+         myRole() == 'STAFF' ||
+         isAdmin());
+      allow delete: if isAdmin();
+    }
+  }
+}

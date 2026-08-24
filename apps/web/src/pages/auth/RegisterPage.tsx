@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { RegisterSchema, RegisterDto } from '@glowbook/validation';
 import { useRegister } from '@/features/auth/hooks';
+import { getFirebaseErrorMessage } from '@/shared/lib/firebase';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { useToast } from '@/shared/hooks/use-toast';
@@ -26,7 +27,7 @@ export default function RegisterPage() {
       toast({
         variant: 'destructive',
         title: 'Registration failed',
-        description: error?.response?.data?.message ?? 'Please try again.',
+        description: getFirebaseErrorMessage(error),
       });
     }
   });

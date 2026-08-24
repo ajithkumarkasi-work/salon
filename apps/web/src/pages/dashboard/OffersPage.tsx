@@ -6,7 +6,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { CustomSelect } from '@/shared/components/ui/custom-select';
-import { api } from '@/shared/lib/api';
+import { couponsService, getFirebaseErrorMessage, listAllCouponsBySalon } from '@/shared/lib/firebase';
 import { useSalonStore } from '@/shared/stores/salon.store';
 import { formatCurrency, formatDate } from '@/shared/lib/utils';
 import { Skeleton } from '@/shared/components/Skeleton';
@@ -43,20 +43,23 @@ export default function OffersPage() {
 
   const { data: coupons, isLoading } = useQuery({
     queryKey: ['coupons', activeSalonId],
-    queryFn: async () => {
-      const { data } = await api.get(`/coupons/salon/${activeSalonId}`);
-      return data;
-    },
+    queryFn: () => listAllCouponsBySalon(activeSalonId!),
     enabled: !!activeSalonId,
   });
 
   const deactivate = useMutation({
-    mutationFn: (id: string) => api.delete(`/coupons/${id}`),
+    mutationFn: (id: string) => couponsService.update(id, { isActive: false }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['coupons', activeSalonId] }),
   });
 
   const createCoupon = useMutation({
-    mutationFn: (payload: any) => api.post(`/coupons/salon/${activeSalonId}`, payload),
+    mutationFn: (payload: any) =>
+      couponsService.create({
+        ...payload,
+        salonId: activeSalonId,
+        usageCount: 0,
+        isActive: true,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['coupons', activeSalonId] });
       toast({ title: 'Coupon created', variant: 'success' as any });
@@ -67,7 +70,7 @@ export default function OffersPage() {
   });
 
   const updateCoupon = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: any }) => api.patch(`/coupons/${id}`, payload),
+    mutationFn: ({ id, payload }: { id: string; payload: any }) => couponsService.update(id, payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['coupons', activeSalonId] });
       toast({ title: 'Coupon updated', variant: 'success' as any });
@@ -139,7 +142,7 @@ export default function OffersPage() {
       toast({
         variant: 'destructive',
         title: editingCoupon ? 'Failed to update coupon' : 'Failed to create coupon',
-        description: error?.response?.data?.message ?? 'Please try again.',
+        description: getFirebaseErrorMessage(error),
       });
     }
   };
@@ -249,54 +252,52 @@ export default function OffersPage() {
           {Array(4).fill(0).map((_, i) => <div key={i} className="rounded-xl border p-5 space-y-3"><Skeleton className="h-4 w-1/2" /><Skeleton className="h-3 w-3/4" /></div>)}
         </div>
       ) : coupons?.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <Tag className="h-10 w-10 mx-auto mb-3 opacity-40" />
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground bg-card border rounded-xl text-center">
+          <Tag className="h-10 w-10 mb-3 opacity-40" />
           <p className="font-medium">No coupons yet</p>
           <p className="text-sm">Create your first discount coupon to attract customers.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-2.5 sm:gap-4 md:grid-cols-2 lg:grid-cols-3">
           {coupons?.map((coupon: Coupon) => (
-            <Card key={coupon.id} className={`h-full border-2 ${coupon.isActive ? 'border-primary/20' : 'border-muted opacity-60'}`}>
-              <CardContent className="flex h-full flex-col p-3 sm:p-5">
-                <div className="mb-2 flex items-center justify-between gap-2 sm:mb-3 sm:items-start">
-                  <div className="min-w-0">
-                    <code className="block truncate text-sm font-bold tracking-wide sm:text-lg">{coupon.code}</code>
-                    <div className="flex items-center gap-2 mt-1">
-                      {coupon.type === 'PERCENTAGE' ? (
-                        <div className="flex items-center gap-1 text-primary">
-                          <Percent className="h-4 w-4 shrink-0" />
-                          <span className="text-base font-bold sm:text-xl">{coupon.value}% off</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1 text-primary">
-                          <span className="text-base font-bold sm:text-xl">{formatCurrency(Number(coupon.value))} off</span>
-                        </div>
-                      )}
+            <Card key={coupon.id} className={`h-full overflow-hidden border ${coupon.isActive ? 'border-primary/40' : 'border-muted opacity-60'}`}>
+              <CardContent className="flex h-full flex-col p-0">
+                <div className="flex items-start justify-between gap-3 border-b border-dashed px-3 py-3 sm:px-5 sm:py-4">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Tag className="h-4 w-4" />
                     </div>
-                    <p className="mt-1 truncate text-[11px] text-muted-foreground sm:hidden">
-                      Valid till {formatDate(coupon.validUntil)}
-                    </p>
+                    <div className="min-w-0">
+                      <code className="block truncate text-sm font-bold tracking-wide sm:text-base">{coupon.code}</code>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">Valid until {formatDate(coupon.validUntil)}</p>
+                    </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                    <Badge variant={coupon.isActive ? 'default' : 'secondary'} className="h-6 px-2 text-[10px] sm:h-auto sm:px-2.5 sm:text-xs">
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Badge variant={coupon.isActive ? 'default' : 'secondary'} className="h-6 px-2 text-[10px] sm:text-xs">
                       {coupon.isActive ? 'Active' : 'Inactive'}
                     </Badge>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(coupon)}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(coupon)} title="Edit coupon">
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
 
-                <div className="hidden min-h-[116px] space-y-1.5 text-xs text-muted-foreground sm:block">
-                  {Number(coupon.minAmount) > 0 && <p>Min. order: {formatCurrency(Number(coupon.minAmount))}</p>}
-                  {coupon.maxDiscount && <p>Max. discount: {formatCurrency(Number(coupon.maxDiscount))}</p>}
-                  {coupon.newCustomersOnly && <p className="text-blue-600 font-medium">New customers only</p>}
-                  {coupon.usageLimit && <p>Used: {coupon.usageCount}/{coupon.usageLimit}</p>}
-                  <p>Valid until: {formatDate(coupon.validUntil)}</p>
+                <div className="flex items-center gap-2 bg-primary/[0.04] px-3 py-4 sm:px-5 sm:py-5">
+                  {coupon.type === 'PERCENTAGE' && <Percent className="h-5 w-5 shrink-0 text-primary" />}
+                  <span className="text-2xl font-bold tracking-tight text-primary sm:text-3xl">
+                    {coupon.type === 'PERCENTAGE' ? `${coupon.value}%` : formatCurrency(Number(coupon.value))}
+                  </span>
+                  <span className="text-sm font-medium text-muted-foreground">discount</span>
                 </div>
 
-                <div className="mt-auto pt-2 sm:pt-3">
+                <div className="min-h-[104px] space-y-1.5 px-3 py-3 text-xs text-muted-foreground sm:px-5">
+                  {Number(coupon.minAmount) > 0 && <p>Minimum order: {formatCurrency(Number(coupon.minAmount))}</p>}
+                  {coupon.maxDiscount != null && <p>Maximum discount: {formatCurrency(Number(coupon.maxDiscount))}</p>}
+                  {coupon.newCustomersOnly && <p className="font-medium text-blue-600">New customers only</p>}
+                  {coupon.usageLimit != null && <p>Used: {coupon.usageCount}/{coupon.usageLimit}</p>}
+                </div>
+
+                <div className="mt-auto px-3 pb-3 pt-3 sm:px-5 sm:pb-5 sm:pt-4">
                   {coupon.isActive ? (
                     <Button
                       variant="outline"

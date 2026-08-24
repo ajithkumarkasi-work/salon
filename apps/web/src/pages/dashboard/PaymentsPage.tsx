@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { api } from '@/shared/lib/api';
+import { where } from 'firebase/firestore';
+import { Receipt } from 'lucide-react';
+import { appointmentsService, enrichAppointments } from '@/shared/lib/firebase';
+import { useSalonStore } from '@/shared/stores/salon.store';
 import { Card, CardContent } from '@/shared/components/ui/card';
 import { Badge } from '@/shared/components/ui/badge';
 import { TableRowSkeleton } from '@/shared/components/Skeleton';
@@ -13,22 +16,40 @@ const STATUS_COLORS: Record<string, string> = {
   FAILED: 'bg-red-100 text-red-800',
 };
 
+// Derives a payment-like record from appointment status, since there is no
+// payment gateway backend anymore (Stripe requires a server-held secret key).
+function toPaymentStatus(appointmentStatus: string): string {
+  if (appointmentStatus === 'COMPLETED') return 'SUCCEEDED';
+  if (appointmentStatus === 'CANCELLED' || appointmentStatus === 'NO_SHOW') return 'REFUNDED';
+  return 'PENDING';
+}
+
 export default function PaymentsPage() {
+  const { activeSalonId } = useSalonStore();
   const { data, isLoading } = useQuery({
-    queryKey: ['payments'],
+    queryKey: ['payments', activeSalonId],
     queryFn: async () => {
-      const { data } = await api.get('/payments/history');
-      return data;
+      const appointments = await enrichAppointments(
+        await appointmentsService.list(where('salonId', '==', activeSalonId)),
+      );
+      return appointments.map((appt) => ({
+        id: appt.id,
+        amount: appt.total,
+        status: toPaymentStatus(appt.status),
+        createdAt: appt.createdAt,
+        appointment: appt,
+      }));
     },
+    enabled: !!activeSalonId,
   });
 
-  const payments = data?.data ?? [];
+  const payments = data ?? [];
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Payments</h1>
-        <Badge variant="secondary">{data?.meta?.total ?? 0} transactions</Badge>
+        <Badge variant="secondary">{payments.length} transactions</Badge>
       </div>
 
       <Card>
@@ -70,8 +91,9 @@ export default function PaymentsPage() {
                 ))}
               </div>
             ) : (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                No payments found for this salon yet.
+              <div className="flex flex-col items-center justify-center px-4 py-10 text-center text-muted-foreground">
+                <Receipt className="h-8 w-8 mb-2 opacity-40" />
+                <p className="text-sm">No payments found for this salon yet.</p>
               </div>
             )}
           </div>
@@ -120,7 +142,10 @@ export default function PaymentsPage() {
                     : (
                       <tr>
                         <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                          No payments found for this salon yet.
+                          <div className="flex flex-col items-center justify-center">
+                            <Receipt className="h-8 w-8 mb-2 opacity-40" />
+                            No payments found for this salon yet.
+                          </div>
                         </td>
                       </tr>
                     )}

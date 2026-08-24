@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/shared/lib/api';
+import { where } from 'firebase/firestore';
+import { Users } from 'lucide-react';
+import { appointmentsService, enrichAppointments } from '@/shared/lib/firebase';
 import { useSalonStore } from '@/shared/stores/salon.store';
 import { useAuthStore } from '@/shared/stores/auth.store';
 import { Card, CardContent } from '@/shared/components/ui/card';
@@ -19,12 +21,12 @@ export default function CustomersPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['customers', activeSalonId],
     queryFn: async () => {
-      const { data } = await api.get('/appointments', {
-        params: { salonId: activeSalonId, limit: 100, status: 'COMPLETED' },
-      });
+      const appointments = await enrichAppointments(
+        await appointmentsService.list(where('salonId', '==', activeSalonId), where('status', '==', 'COMPLETED')),
+      );
       // Aggregate customer stats from appointments
       const customerMap = new Map<string, any>();
-      data.data.forEach((appt: any) => {
+      appointments.forEach((appt: any) => {
         const c = appt.customer;
         if (!c) return;
         const existing = customerMap.get(c.id) ?? {
@@ -125,8 +127,9 @@ export default function CustomersPage() {
                 ))}
               </div>
             ) : (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                No customers found yet.
+              <div className="flex flex-col items-center justify-center px-4 py-10 text-center text-muted-foreground">
+                <Users className="h-8 w-8 mb-2 opacity-40" />
+                <p className="text-sm">No customers found yet.</p>
               </div>
             )}
           </div>
@@ -145,7 +148,8 @@ export default function CustomersPage() {
               <tbody>
                 {isLoading
                   ? Array(8).fill(0).map((_, i) => <TableRowSkeleton key={i} cols={5} />)
-                  : data?.map((customer: any) => (
+                  : (data?.length ?? 0) > 0
+                    ? data?.map((customer: any) => (
                       <tr
                         key={customer.id}
                         className={canOpenCustomerDrawer ? 'border-b last:border-b-0 cursor-pointer hover:bg-muted/30 transition-colors' : 'border-b last:border-b-0 hover:bg-muted/30 transition-colors'}
@@ -171,7 +175,17 @@ export default function CustomersPage() {
                           {customer.lastVisit ? new Date(customer.lastVisit).toLocaleDateString('en-IN') : '—'}
                         </td>
                       </tr>
-                    ))}
+                    ))
+                    : (
+                      <tr>
+                        <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                          <div className="flex flex-col items-center justify-center">
+                            <Users className="h-8 w-8 mb-2 opacity-40" />
+                            No customers found yet.
+                          </div>
+                        </td>
+                      </tr>
+                    )}
               </tbody>
             </table>
           </div>
