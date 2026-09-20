@@ -1,4 +1,4 @@
-name: Web CI + Deploy
+name: Web CI + Firebase Deploy
 
 on:
   push:
@@ -19,8 +19,6 @@ concurrency:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 jobs:
   build:
@@ -43,27 +41,39 @@ jobs:
         run: npm run -w apps/web typecheck
 
       - name: Build web
-        run: npm run -w apps/web build -- --base=/salon/
+        run: npm run -w apps/web build
         env:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
-
-      - name: SPA fallback for GitHub Pages
-        run: cp apps/web/dist/index.html apps/web/dist/404.html
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: apps/web/dist
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
     if: ${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/ajithkumarkasi-work' }}
     environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      name: production
+      url: https://spa-service-booking-2026.web.app
 
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web
+        run: npm run -w apps/web build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: spa-service-booking-2026

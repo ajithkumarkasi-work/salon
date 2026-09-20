@@ -16,9 +16,14 @@ A production-quality, full-stack **Salon & Spa Appointment Booking Platform** bu
 
 ## Live URLs
 
-- Web App (GitHub Pages): `https://ajithkumarkasi-work.github.io/salon/`
+- Web App (Firebase Hosting): `https://spa-service-booking-2026.web.app/`
 - API Base (Production): `https://salon-api-ubfz.onrender.com/api/v1`
 - Swagger (Production): `https://salon-api-ubfz.onrender.com/api/docs`
+
+## CI/CD
+
+- Web pushes to `main` and `ajithkumarkasi-work` build the Vite app and deploy it to Firebase Hosting.
+- The workflow expects a repository secret named `FIREBASE_SERVICE_ACCOUNT` with the Firebase service account JSON.
 
 ---
 
