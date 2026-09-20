@@ -21,7 +21,13 @@ export default function RegisterPage() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      await register_.mutateAsync(data);
+      await register_.mutateAsync({
+        ...data,
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
+        email: data.email.trim().toLowerCase(),
+        phone: data.phone?.trim() || undefined,
+      });
       navigate('/dashboard');
     } catch (error: any) {
       toast({

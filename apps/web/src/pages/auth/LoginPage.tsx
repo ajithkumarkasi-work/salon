@@ -21,7 +21,10 @@ export default function LoginPage() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      await login.mutateAsync(data);
+      await login.mutateAsync({
+        ...data,
+        email: data.email.trim().toLowerCase(),
+      });
       navigate('/dashboard');
     } catch (error: any) {
       toast({
@@ -79,14 +82,13 @@ export default function LoginPage() {
       <div className="rounded-lg bg-muted p-4 space-y-2">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Demo accounts</p>
         {[
-          { role: 'Customer', email: 'customer@glowbook.demo' },
-          { role: 'Customer 2', email: 'customer2@glowbook.demo' },
-          { role: 'Owner', email: 'owner@glowbook.demo' },
-          { role: 'Staff', email: 'staff@glowbook.demo' },
-          { role: 'Admin', email: 'admin@glowbook.demo' },
+          { role: 'Customer', email: 'customer@glowbook.demo', password: 'Asdfghjkl1' },
+          { role: 'Owner', email: 'owner@glowbook.demo', password: 'GlowBook2024' },
+          { role: 'Staff', email: 'ananya@glowbook.demo', password: '12345678' },
+          { role: 'Admin', email: 'rahul@glowbook.demo', password: '12345678' },
         ].map((acc) => (
           <div key={acc.role} className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{acc.role}:</span> {acc.email} / GlowBook2024
+            <span className="font-medium text-foreground">{acc.role}:</span> {acc.email} / {acc.password}
           </div>
         ))}
       </div>

@@ -35,11 +35,10 @@ export default function LoginScreen() {
 
       <View style={styles.demoCard}>
         <Text style={styles.demoTitle}>Demo accounts</Text>
-        <Text style={styles.demoItem}>Customer: customer@glowbook.demo / GlowBook2024</Text>
-        <Text style={styles.demoItem}>Customer 2: customer2@glowbook.demo / GlowBook2024</Text>
+        <Text style={styles.demoItem}>Customer: customer@glowbook.demo / Asdfghjkl1</Text>
         <Text style={styles.demoItem}>Owner: owner@glowbook.demo / GlowBook2024</Text>
-        <Text style={styles.demoItem}>Staff: staff@glowbook.demo / GlowBook2024</Text>
-        <Text style={styles.demoItem}>Admin: admin@glowbook.demo / GlowBook2024</Text>
+        <Text style={styles.demoItem}>Staff: ananya@glowbook.demo / 12345678</Text>
+        <Text style={styles.demoItem}>Admin: rahul@glowbook.demo/ 12345678</Text>
       </View>
 
       <TouchableOpacity onPress={() => router.push('/auth/register')}>
