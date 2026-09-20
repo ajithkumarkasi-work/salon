@@ -18,6 +18,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
+      "@glowbook/firebase": ["../../packages/firebase/src"],
       "@glowbook/shared-types": ["../../packages/shared-types/src"],
       "@glowbook/validation": ["../../packages/validation/src"]
     }

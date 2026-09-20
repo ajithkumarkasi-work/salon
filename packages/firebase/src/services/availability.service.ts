@@ -1,4 +1,4 @@
-import { DayOfWeek, TimeSlot } from '@glowbook/shared-types';
+import { Appointment, DayOfWeek, TimeSlot } from '@glowbook/shared-types';
 import { where } from 'firebase/firestore';
 import { appointmentsService } from './appointments.service';
 import { servicesService } from './services.service';
@@ -86,7 +86,7 @@ export async function getAvailability({ salonId, serviceId, staffId, date }: Ava
 
     const dayStart = new Date(`${date}T00:00:00`);
     const dayEnd = new Date(`${date}T23:59:59`);
-    let existingAppointments = [];
+    let existingAppointments: Appointment[] = [];
     try {
       existingAppointments = (await appointmentsService.list(where('staffId', '==', member.id))).filter((appt) => {
         const start = new Date(appt.startTime);

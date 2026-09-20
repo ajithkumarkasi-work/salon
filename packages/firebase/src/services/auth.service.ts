@@ -80,7 +80,7 @@ export async function fetchUserProfile(uid: string): Promise<User> {
   if (!snapshot.exists()) {
     throw new Error(`No user profile found for uid ${uid}`);
   }
-  return { id: snapshot.id, ...snapshot.data() } as User;
+  return { ...(snapshot.data() as Omit<User, 'id'>), id: snapshot.id } as User;
 }
 
 export async function updateUserProfile(uid: string, updates: Partial<User>): Promise<User> {
@@ -97,7 +97,7 @@ export async function findUserByEmail(email: string): Promise<User | null> {
 
 export async function listUsersByRole(role: UserRole): Promise<User[]> {
   const snapshot = await getDocs(query(typedCollection<User>(Collections.users), where('role', '==', role)));
-  return snapshot.docs.map((docSnapshot) => ({ id: docSnapshot.id, ...docSnapshot.data() }));
+  return snapshot.docs.map((docSnapshot) => ({ ...(docSnapshot.data() as Omit<User, 'id'>), id: docSnapshot.id }));
 }
 
 export interface WalkInCustomerInput {
