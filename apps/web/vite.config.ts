@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@glowbook/firebase': path.resolve(__dirname, '../../packages/firebase/src'),
       '@glowbook/shared-types': path.resolve(__dirname, '../../packages/shared-types/src'),
       '@glowbook/validation': path.resolve(__dirname, '../../packages/validation/src'),
     },
